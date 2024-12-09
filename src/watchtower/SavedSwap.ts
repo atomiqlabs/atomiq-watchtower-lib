@@ -1,5 +1,5 @@
 import {Lockable} from "./Lockable";
-import {ChainType, SwapData} from "crosslightning-base";
+import {ChainType, SwapData} from "@atomiqlabs/base";
 
 export class SavedSwap<T extends ChainType> extends Lockable {
 

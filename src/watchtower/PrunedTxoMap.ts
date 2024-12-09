@@ -1,6 +1,6 @@
 import {createHash} from "crypto";
 import * as fs from "fs/promises";
-import {BitcoinRpc, BtcBlock, BtcBlockWithTxs} from "crosslightning-base";
+import {BitcoinRpc, BtcBlock, BtcBlockWithTxs} from "@atomiqlabs/base";
 
 
 export class PrunedTxoMap {

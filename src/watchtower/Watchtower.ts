@@ -9,7 +9,7 @@ import {
     BitcoinRpc,
     SwapDataVerificationError,
     ChainType
-} from "crosslightning-base";
+} from "@atomiqlabs/base";
 
 
 export class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {

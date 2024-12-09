@@ -1,7 +1,7 @@
 {
-  "name": "btcrelay-watchtower",
+  "name": "@atomiqlabs/watchtower-lib",
   "version": "5.2.0",
-  "description": "Watchtower chain agnostic implementation",
+  "description": "atomiq watchtower functionality library",
   "main": "./dist/index.js",
   "types:": "./dist/index.d.ts",
   "scripts": {
@@ -22,8 +22,8 @@
   "author": "adambor",
   "license": "ISC",
   "dependencies": {
-    "bn.js": "5.2.1",
-    "crosslightning-base": "7.2.0"
+    "@atomiqlabs/base": "7.2.0",
+    "bn.js": "5.2.1"
   },
   "devDependencies": {
     "@types/node": "18.18.3",
