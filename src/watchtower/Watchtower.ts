@@ -1,5 +1,4 @@
 import {PrunedTxoMap} from "./PrunedTxoMap";
-import * as fs from "fs/promises";
 import {SavedSwap} from "./SavedSwap";
 import {
     BtcStoredHeader,
