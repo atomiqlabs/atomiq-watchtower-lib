@@ -73,6 +73,7 @@ export class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
         [identifier: string]: WatchtowerClaimTxType<T>
     }> {
         await this.EscrowSwaps.init();
+        await this.SpvVaultSwaps.init();
 
         console.log("Watchtower: init(): Loaded!");
 

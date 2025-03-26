@@ -26,6 +26,7 @@ class Watchtower {
     init() {
         return __awaiter(this, void 0, void 0, function* () {
             yield this.EscrowSwaps.init();
+            yield this.SpvVaultSwaps.init();
             console.log("Watchtower: init(): Loaded!");
             //Sync to latest on Solana
             yield this.swapEvents.init();
