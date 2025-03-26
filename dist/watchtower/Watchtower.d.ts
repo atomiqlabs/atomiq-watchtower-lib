@@ -1,41 +1,49 @@
-import { PrunedTxoMap } from "./PrunedTxoMap";
+import { PrunedTxMap } from "./PrunedTxMap";
 import { SavedSwap } from "./SavedSwap";
 import { BtcStoredHeader, BitcoinRpc, ChainType, IStorageManager } from "@atomiqlabs/base";
+import { EscrowSwaps } from "./EscrowSwaps";
+import { SpvVaultSwaps } from "./SpvVaultSwaps";
+export type WatchtowerEscrowClaimData<T extends ChainType> = {
+    txId: string;
+    vout: number;
+    maturedAt: number;
+    blockheight: number;
+    swapData: T["Data"];
+};
+export type WatchtowerSpvVaultClaimData<T extends ChainType> = {
+    vault: T["SpvVaultData"];
+    withdrawals: {
+        txId: string;
+        maturedAt: number;
+        blockheight: number;
+        data: T["SpvVaultWithdrawalData"];
+    }[];
+};
+export type WatchtowerClaimTxType<T extends ChainType> = {
+    txs: T["TX"][];
+    data: WatchtowerEscrowClaimData<T> | WatchtowerSpvVaultClaimData<T>;
+};
 export declare class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
-    readonly txoHashMap: Map<string, SavedSwap<T>>;
-    readonly escrowHashMap: Map<string, SavedSwap<T>>;
     readonly btcRelay: T["BtcRelay"];
-    readonly swapContract: T["Contract"];
     readonly swapEvents: T["Events"];
     readonly signer: T["Signer"];
     readonly bitcoinRpc: BitcoinRpc<any>;
-    readonly prunedTxoMap: PrunedTxoMap;
-    readonly storage: IStorageManager<SavedSwap<T>>;
-    readonly shouldClaimCbk: (swap: SavedSwap<T>) => Promise<{
+    readonly prunedTxoMap: PrunedTxMap;
+    readonly EscrowSwaps: EscrowSwaps<T, B>;
+    readonly SpvVaultSwaps: SpvVaultSwaps<T, B>;
+    constructor(storage: IStorageManager<SavedSwap<T>>, vaultStorage: IStorageManager<T["SpvVaultData"]>, wtHeightStorageFile: string, btcRelay: T["BtcRelay"], chainEvents: T["Events"], swapContract: T["Contract"], spvVaultContract: T["SpvVaultContract"], spvVaultDataDeserializer: new (obj: any) => T["SpvVaultData"], signer: T["Signer"], bitcoinRpc: BitcoinRpc<any>, pruningFactor?: number, escrowShouldClaimCbk?: (swap: SavedSwap<T>) => Promise<{
         initAta: boolean;
         feeRate: any;
-    }>;
-    constructor(storage: IStorageManager<SavedSwap<T>>, wtHeightStorageFile: string, btcRelay: T["BtcRelay"], solEvents: T["Events"], swapContract: T["Contract"], signer: T["Signer"], bitcoinRpc: BitcoinRpc<any>, pruningFactor?: number, shouldClaimCbk?: (swap: SavedSwap<T>) => Promise<{
+    }>, vaultShouldClaimCbk?: (vault: T["SpvVaultData"], txs: T["SpvVaultWithdrawalData"][]) => Promise<{
         initAta: boolean;
         feeRate: any;
     }>);
-    private load;
-    private save;
-    private remove;
-    private removeByEscrowHash;
-    private createClaimTxs;
-    private claim;
-    init(): Promise<void>;
+    init(): Promise<{
+        [identifier: string]: WatchtowerClaimTxType<T>;
+    }>;
     syncToTipHash(tipBlockHash: string, computedHeaderMap?: {
         [blockheight: number]: B;
     }): Promise<{
-        [txcHash: string]: {
-            txs: T["TX"][];
-            txId: string;
-            vout: number;
-            maturedAt: number;
-            blockheight: number;
-            swapData: T["Data"];
-        };
+        [identifier: string]: WatchtowerClaimTxType<T>;
     }>;
 }
