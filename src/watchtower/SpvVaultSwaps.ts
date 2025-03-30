@@ -143,7 +143,10 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
             }[]
         }
     }> {
-        if(vault.isOpened()) return;
+        if(!vault.isOpened()) {
+            console.log("SpvVaultSwaps: tryGetClaimTxs(): Tried to claim but vault is not opened!");
+            return null;
+        }
 
         //Get fresh vault
         vault = await this.spvVaultContract.getVaultData(vault.getOwner(), vault.getVaultId());

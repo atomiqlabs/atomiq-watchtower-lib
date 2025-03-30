@@ -112,8 +112,10 @@ class SpvVaultSwaps {
     }
     tryGetClaimTxs(vault, txs, tipHeight, computedHeaderMap) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (vault.isOpened())
-                return;
+            if (!vault.isOpened()) {
+                console.log("SpvVaultSwaps: tryGetClaimTxs(): Tried to claim but vault is not opened!");
+                return null;
+            }
             //Get fresh vault
             vault = yield this.spvVaultContract.getVaultData(vault.getOwner(), vault.getVaultId());
             let withdrawals = [];
