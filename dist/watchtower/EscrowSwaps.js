@@ -251,6 +251,8 @@ class EscrowSwaps {
                 if (txs[txoHash] != null)
                     continue;
                 const data = this.root.prunedTxoMap.getTxoObject(txoHash);
+                if (data == null)
+                    continue;
                 txs[txoHash] = yield this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
             }
             return txs;

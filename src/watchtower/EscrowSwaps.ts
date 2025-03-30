@@ -309,6 +309,7 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
         for(let txoHash of this.txoHashMap.keys()) {
             if(txs[txoHash]!=null) continue;
             const data = this.root.prunedTxoMap.getTxoObject(txoHash);
+            if(data==null) continue;
             txs[txoHash] = await this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
         }
 
