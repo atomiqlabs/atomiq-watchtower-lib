@@ -85,8 +85,9 @@ class PrunedTxMap {
         buff.write(outputScript, 8, "hex");
         return (0, crypto_1.createHash)("sha256").update(buff).digest();
     }
-    addBlock(headerHash, waitingForTxosMap, waitingForTxinMap, newlyCreatedUtxos = new Set(), noSaveTipHeight) {
+    addBlock(headerHash, waitingForTxosMap, waitingForTxinMap, newlyCreatedUtxos, noSaveTipHeight) {
         return __awaiter(this, void 0, void 0, function* () {
+            newlyCreatedUtxos !== null && newlyCreatedUtxos !== void 0 ? newlyCreatedUtxos : (newlyCreatedUtxos = new Set());
             const block = yield this.bitcoinRpc.getBlockWithTransactions(headerHash);
             console.log("[PrunedTxoMap]: Adding block  " + block.height + ", hash: ", block.hash);
             if (!noSaveTipHeight) {

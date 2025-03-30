@@ -129,7 +129,7 @@ export class PrunedTxMap {
         headerHash: string,
         waitingForTxosMap?: Map<string, any>,
         waitingForTxinMap?: Map<string, any>,
-        newlyCreatedUtxos: Set<string> = new Set(),
+        newlyCreatedUtxos?: Set<string>,
         noSaveTipHeight?: boolean
     ): Promise<{
         block: BtcBlockWithTxs,
@@ -143,6 +143,7 @@ export class PrunedTxMap {
             height: number
         }>
     }> {
+        newlyCreatedUtxos ??= new Set();
 
         const block: BtcBlockWithTxs = await this.bitcoinRpc.getBlockWithTransactions(headerHash);
 
