@@ -265,7 +265,9 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
             const vault = this.storage.data[vaultIdentifier];
 
             try {
-                txs[vaultIdentifier] = await this.tryGetClaimTxs(vault, vaultWithdrawalTxs[vaultIdentifier], tipHeight, computedHeaderMap);
+                const res = await this.tryGetClaimTxs(vault, vaultWithdrawalTxs[vaultIdentifier], tipHeight, computedHeaderMap);
+                if(res==null) continue;
+                txs[vaultIdentifier] = res;
             } catch (e) {
                 console.error("SpvVaultSwaps: getClaimTxs(): Error when trying to get claim txs for vault: "+vaultIdentifier, e);
             }

@@ -209,7 +209,10 @@ class SpvVaultSwaps {
             for (let vaultIdentifier in vaultWithdrawalTxs) {
                 const vault = this.storage.data[vaultIdentifier];
                 try {
-                    txs[vaultIdentifier] = yield this.tryGetClaimTxs(vault, vaultWithdrawalTxs[vaultIdentifier], tipHeight, computedHeaderMap);
+                    const res = yield this.tryGetClaimTxs(vault, vaultWithdrawalTxs[vaultIdentifier], tipHeight, computedHeaderMap);
+                    if (res == null)
+                        continue;
+                    txs[vaultIdentifier] = res;
                 }
                 catch (e) {
                     console.error("SpvVaultSwaps: getClaimTxs(): Error when trying to get claim txs for vault: " + vaultIdentifier, e);
