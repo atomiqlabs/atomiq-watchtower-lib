@@ -214,11 +214,22 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
                 }
                 if(useWithdrawalTxData.length===0) return null;
 
+                let useFeeRate = feeRate;
+                let useInitAta = initAta;
+                if(this.shouldClaimCbk!=null) {
+                    const result = await this.shouldClaimCbk(useVault, useWithdrawalTxData.map(val => val.tx));
+                    if(result==null) {
+                        console.log("SpvVaultSwaps: tryGetClaimTxs(): Not claiming due to negative response from claim cbk, owner: "+vault.getOwner()+" vaultId: "+vault.getVaultId().toString(10)+" withdrawals: "+withdrawals.length);
+                        return null;
+                    }
+                    ({feeRate: useFeeRate, initAta: useInitAta} = result);
+                }
+
                 return await this.spvVaultContract.txsClaim(
                     this.root.signer.getAddress(),
                     vault,
                     withdrawalTxData,
-                    null, initAta, feeRate
+                    null, useInitAta, useFeeRate
                 );
             },
             data: {

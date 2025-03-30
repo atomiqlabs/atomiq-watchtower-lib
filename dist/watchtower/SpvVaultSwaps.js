@@ -178,7 +178,17 @@ class SpvVaultSwaps {
                     }
                     if (useWithdrawalTxData.length === 0)
                         return null;
-                    return yield this.spvVaultContract.txsClaim(this.root.signer.getAddress(), vault, withdrawalTxData, null, initAta, feeRate);
+                    let useFeeRate = feeRate;
+                    let useInitAta = initAta;
+                    if (this.shouldClaimCbk != null) {
+                        const result = yield this.shouldClaimCbk(useVault, useWithdrawalTxData.map(val => val.tx));
+                        if (result == null) {
+                            console.log("SpvVaultSwaps: tryGetClaimTxs(): Not claiming due to negative response from claim cbk, owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " withdrawals: " + withdrawals.length);
+                            return null;
+                        }
+                        ({ feeRate: useFeeRate, initAta: useInitAta } = result);
+                    }
+                    return yield this.spvVaultContract.txsClaim(this.root.signer.getAddress(), vault, withdrawalTxData, null, useInitAta, useFeeRate);
                 }),
                 data: {
                     vault,
