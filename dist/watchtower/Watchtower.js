@@ -34,23 +34,17 @@ class Watchtower {
             const resp = yield this.btcRelay.retrieveLatestKnownBlockLog();
             //Sync to previously processed block
             yield this.prunedTxoMap.init(resp.resultBitcoinHeader.height);
-            //Get claim txs till the previously processed block
-            const initialEscrowClaimTxs = yield this.EscrowSwaps.getClaimTxs();
-            const initialSpvVaultClaimTxs = yield this.SpvVaultSwaps.getClaimTxs();
-            console.log("Watchtower: init(): Returned escrow claim txs: ", initialEscrowClaimTxs);
-            console.log("Watchtower: init(): Returned spv vault claim txs: ", initialEscrowClaimTxs);
             console.log("Watchtower: init(): Synced to last processed block");
             //Sync watchtower to the btc relay height and get all the claim txs
-            const postSyncClaimTxs = yield this.syncToTipHash(resp.resultBitcoinHeader.hash);
-            return Object.assign(Object.assign(Object.assign({}, initialEscrowClaimTxs), initialSpvVaultClaimTxs), postSyncClaimTxs);
+            return yield this.syncToTipHash(resp.resultBitcoinHeader.hash);
         });
     }
-    syncToTipHash(tipBlockHash, computedHeaderMap) {
+    syncToTipHash(newTipBlockHash, computedHeaderMap) {
         return __awaiter(this, void 0, void 0, function* () {
-            console.log("[Watchtower.syncToTipHash]: Syncing to tip hash: ", tipBlockHash);
+            console.log("[Watchtower.syncToTipHash]: Syncing to tip hash: ", newTipBlockHash);
             //Check txoHashes that got required confirmations in these blocks,
             // but they might be already pruned if we only checked after
-            const { foundTxos, foundTxins } = yield this.prunedTxoMap.syncToTipHash(tipBlockHash, this.EscrowSwaps.txoHashMap, this.SpvVaultSwaps.txinMap);
+            const { foundTxos, foundTxins } = yield this.prunedTxoMap.syncToTipHash(newTipBlockHash, this.EscrowSwaps.txoHashMap, this.SpvVaultSwaps.txinMap);
             console.log("Watchtower: syncToTipHash(): Returned found txins: ", foundTxins);
             const escrowClaimTxs = yield this.EscrowSwaps.getClaimTxs(foundTxos, computedHeaderMap);
             const spvVaultClaimTxs = yield this.SpvVaultSwaps.getClaimTxs(foundTxins, computedHeaderMap);

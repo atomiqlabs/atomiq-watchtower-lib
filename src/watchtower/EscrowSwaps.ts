@@ -268,13 +268,17 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
                     await this.remove(savedSwap.txoHash);
                 } else {
                     return {
-                        txs: claimTxs,
+                        getTxs: async (height?: number, checkClaimable?: boolean) => {
+                            if(height!=null && height < requiredBlockHeight) return null;
+                            if(checkClaimable && !(await this.swapContract.isCommited(savedSwap.swapData))) return null;
+                            return claimTxs;
+                        },
                         data: {
                             vout: data.vout,
                             swapData: savedSwap.swapData,
                             txId: data.txId,
                             blockheight: data.height,
-                            maturedAt: data.height+savedSwap.swapData.getConfirmationsHint()-1,
+                            maturedAt: requiredBlockHeight,
                         }
                     }
                 }

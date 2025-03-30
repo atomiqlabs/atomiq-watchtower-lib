@@ -150,14 +150,36 @@ class SpvVaultSwaps {
                 ({ feeRate, initAta } = result);
             }
             console.info("SpvVaultSwaps: tryGetClaimTxs(): Processing " + withdrawals.length + " withdrawals for vault: " + this.getIdentifier(vault.getOwner(), vault.getVaultId()));
-            const resultTxs = yield this.spvVaultContract.txsClaim(this.root.signer.getAddress(), vault, withdrawals.map(((tx, index) => {
+            const withdrawalTxData = withdrawals.map(((tx, index) => {
                 return {
                     tx,
-                    storedHeader: blockheaders[index]
+                    storedHeader: blockheaders[index],
+                    height: txs[index].height
                 };
-            })), null, initAta, feeRate);
+            }));
             return {
-                txs: resultTxs,
+                getTxs: (height, checkClaimable) => __awaiter(this, void 0, void 0, function* () {
+                    let useWithdrawalTxData = withdrawalTxData;
+                    let useVault = vault;
+                    if (height != null) {
+                        //Filter out the withdrawals that haven't matured yet
+                        useWithdrawalTxData = useWithdrawalTxData.filter(val => val.height + useVault.getConfirmations() - 1 <= height);
+                    }
+                    if (checkClaimable) {
+                        //Get fresh vault
+                        useVault = yield this.spvVaultContract.getVaultData(vault.getOwner(), vault.getVaultId());
+                        if (useVault.getUtxo() !== vault.getUtxo()) {
+                            //Only process withdrawal tx data up from the new vault utxo
+                            const startIndex = useWithdrawalTxData.findIndex(val => val.tx.getSpentVaultUtxo() === useVault.getUtxo());
+                            if (startIndex == -1)
+                                return null;
+                            useWithdrawalTxData = useWithdrawalTxData.slice(startIndex);
+                        }
+                    }
+                    if (useWithdrawalTxData.length === 0)
+                        return null;
+                    return yield this.spvVaultContract.txsClaim(this.root.signer.getAddress(), vault, withdrawalTxData, null, initAta, feeRate);
+                }),
                 data: {
                     vault,
                     withdrawals: withdrawals.map((tx, index) => {

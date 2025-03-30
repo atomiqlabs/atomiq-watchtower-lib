@@ -132,7 +132,7 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
         tipHeight: number,
         computedHeaderMap?: {[blockheight: number]: B}
     ): Promise<{
-        txs: T["TX"][],
+        getTxs: (height?: number, checkClaimable?: boolean) => Promise<T["TX"][] | null>,
         data: {
             vault: T["SpvVaultData"],
             withdrawals: {
@@ -186,20 +186,41 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
 
         console.info("SpvVaultSwaps: tryGetClaimTxs(): Processing "+withdrawals.length+" withdrawals for vault: "+this.getIdentifier(vault.getOwner(), vault.getVaultId()));
 
-        const resultTxs = await this.spvVaultContract.txsClaim(
-            this.root.signer.getAddress(),
-            vault,
-            withdrawals.map(((tx, index) => {
-                return {
-                    tx,
-                    storedHeader: blockheaders[index]
-                }
-            })),
-            null, initAta, feeRate
-        );
+        const withdrawalTxData = withdrawals.map(((tx, index) => {
+            return {
+                tx,
+                storedHeader: blockheaders[index],
+                height: txs[index].height
+            }
+        }));
 
         return {
-            txs: resultTxs,
+            getTxs: async (height?: number, checkClaimable?: boolean) => {
+                let useWithdrawalTxData = withdrawalTxData;
+                let useVault = vault;
+                if(height!=null) {
+                    //Filter out the withdrawals that haven't matured yet
+                    useWithdrawalTxData = useWithdrawalTxData.filter(val => val.height+useVault.getConfirmations()-1 <= height);
+                }
+                if(checkClaimable) {
+                    //Get fresh vault
+                    useVault = await this.spvVaultContract.getVaultData(vault.getOwner(), vault.getVaultId());
+                    if(useVault.getUtxo()!==vault.getUtxo()) {
+                        //Only process withdrawal tx data up from the new vault utxo
+                        const startIndex = useWithdrawalTxData.findIndex(val => val.tx.getSpentVaultUtxo()===useVault.getUtxo());
+                        if(startIndex==-1) return null;
+                        useWithdrawalTxData = useWithdrawalTxData.slice(startIndex);
+                    }
+                }
+                if(useWithdrawalTxData.length===0) return null;
+
+                return await this.spvVaultContract.txsClaim(
+                    this.root.signer.getAddress(),
+                    vault,
+                    withdrawalTxData,
+                    null, initAta, feeRate
+                );
+            },
             data: {
                 vault,
                 withdrawals: withdrawals.map((tx, index) => {

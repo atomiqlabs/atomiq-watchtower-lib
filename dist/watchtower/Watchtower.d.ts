@@ -20,7 +20,7 @@ export type WatchtowerSpvVaultClaimData<T extends ChainType> = {
     }[];
 };
 export type WatchtowerClaimTxType<T extends ChainType> = {
-    txs: T["TX"][];
+    getTxs: (height?: number, checkClaimable?: boolean) => Promise<T["TX"][] | null>;
     data: WatchtowerEscrowClaimData<T> | WatchtowerSpvVaultClaimData<T>;
 };
 export declare class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
@@ -41,7 +41,7 @@ export declare class Watchtower<T extends ChainType, B extends BtcStoredHeader<a
     init(): Promise<{
         [identifier: string]: WatchtowerClaimTxType<T>;
     }>;
-    syncToTipHash(tipBlockHash: string, computedHeaderMap?: {
+    syncToTipHash(newTipBlockHash: string, computedHeaderMap?: {
         [blockheight: number]: B;
     }): Promise<{
         [identifier: string]: WatchtowerClaimTxType<T>;

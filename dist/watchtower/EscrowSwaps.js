@@ -217,13 +217,19 @@ class EscrowSwaps {
                     }
                     else {
                         return {
-                            txs: claimTxs,
+                            getTxs: (height, checkClaimable) => __awaiter(this, void 0, void 0, function* () {
+                                if (height != null && height < requiredBlockHeight)
+                                    return null;
+                                if (checkClaimable && !(yield this.swapContract.isCommited(savedSwap.swapData)))
+                                    return null;
+                                return claimTxs;
+                            }),
                             data: {
                                 vout: data.vout,
                                 swapData: savedSwap.swapData,
                                 txId: data.txId,
                                 blockheight: data.height,
-                                maturedAt: data.height + savedSwap.swapData.getConfirmationsHint() - 1,
+                                maturedAt: requiredBlockHeight,
                             }
                         };
                     }

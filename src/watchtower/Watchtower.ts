@@ -27,7 +27,7 @@ export type WatchtowerSpvVaultClaimData<T extends ChainType> = {
 };
 
 export type WatchtowerClaimTxType<T extends ChainType> = {
-    txs: T["TX"][],
+    getTxs: (height?: number, checkClaimable?: boolean) => Promise<T["TX"][] | null>,
     data: WatchtowerEscrowClaimData<T> | WatchtowerSpvVaultClaimData<T>
 };
 
@@ -86,36 +86,23 @@ export class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
 
         //Sync to previously processed block
         await this.prunedTxoMap.init(resp.resultBitcoinHeader.height);
-
-        //Get claim txs till the previously processed block
-        const initialEscrowClaimTxs = await this.EscrowSwaps.getClaimTxs();
-        const initialSpvVaultClaimTxs = await this.SpvVaultSwaps.getClaimTxs();
-        console.log("Watchtower: init(): Returned escrow claim txs: ", initialEscrowClaimTxs);
-        console.log("Watchtower: init(): Returned spv vault claim txs: ", initialEscrowClaimTxs);
-
         console.log("Watchtower: init(): Synced to last processed block");
 
         //Sync watchtower to the btc relay height and get all the claim txs
-        const postSyncClaimTxs = await this.syncToTipHash(resp.resultBitcoinHeader.hash);
-
-        return {
-            ...initialEscrowClaimTxs,
-            ...initialSpvVaultClaimTxs,
-            ...postSyncClaimTxs
-        };
+        return  await this.syncToTipHash(resp.resultBitcoinHeader.hash);
     }
 
     async syncToTipHash(
-        tipBlockHash: string,
+        newTipBlockHash: string,
         computedHeaderMap?: {[blockheight: number]: B}
     ): Promise<{
         [identifier: string]: WatchtowerClaimTxType<T>
     }> {
-        console.log("[Watchtower.syncToTipHash]: Syncing to tip hash: ", tipBlockHash);
+        console.log("[Watchtower.syncToTipHash]: Syncing to tip hash: ", newTipBlockHash);
 
         //Check txoHashes that got required confirmations in these blocks,
         // but they might be already pruned if we only checked after
-        const {foundTxos, foundTxins} = await this.prunedTxoMap.syncToTipHash(tipBlockHash, this.EscrowSwaps.txoHashMap, this.SpvVaultSwaps.txinMap);
+        const {foundTxos, foundTxins} = await this.prunedTxoMap.syncToTipHash(newTipBlockHash, this.EscrowSwaps.txoHashMap, this.SpvVaultSwaps.txinMap);
         console.log("Watchtower: syncToTipHash(): Returned found txins: ", foundTxins);
 
         const escrowClaimTxs = await this.EscrowSwaps.getClaimTxs(foundTxos, computedHeaderMap);

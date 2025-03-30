@@ -1,6 +1,6 @@
 {
   "name": "@atomiqlabs/watchtower-lib",
-  "version": "6.0.0-dev.6",
+  "version": "6.0.0-dev.7",
   "description": "atomiq watchtower functionality library",
   "main": "./dist/index.js",
   "types:": "./dist/index.d.ts",

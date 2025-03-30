@@ -62,6 +62,19 @@ class PrunedTxMap {
             }
             const totalFoundTxos = new Map();
             const totalFoundTxins = new Map();
+            //Add txos and txins from current maps
+            if (waitingForTxosMap != null)
+                waitingForTxosMap.forEach((_, key) => {
+                    const val = this.txoMap.get(key);
+                    if (val != null)
+                        totalFoundTxos.set(key, val);
+                });
+            if (waitingForTxinMap != null)
+                waitingForTxinMap.forEach((_, key) => {
+                    const val = this.txinMap.get(key);
+                    if (val != null)
+                        totalFoundTxins.set(key, val);
+                });
             console.log("[PrunedTxoMap]: Syncing through blockhashes: ", blockHashes);
             const newlyCreatedUtxos = new Set();
             for (let i = blockHashes.length - 1; i >= 0; i--) {
