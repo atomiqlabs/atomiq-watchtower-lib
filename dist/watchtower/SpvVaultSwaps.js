@@ -171,10 +171,17 @@ class SpvVaultSwaps {
             const vaultWithdrawalTxs = {};
             //Check txoHashes that got required confirmations in the to-be-synchronized blocks,
             // but they might be already pruned if we only checked after
+            const processedUtxos = new Set();
             if (foundTxins != null) {
                 for (let entry of foundTxins.entries()) {
                     const utxo = entry[0];
+                    if (processedUtxos.has(utxo))
+                        continue;
                     const vault = this.txinMap.get(utxo);
+                    if (vault == null) {
+                        console.warn("SpvVaultSwaps: getClaimTxs(): Skipping claiming of tx " + entry[1].txId + " because swap vault isn't known!");
+                        continue;
+                    }
                     const txsData = [entry[1]];
                     //Try to also get next withdrawals
                     while (true) {
@@ -182,6 +189,7 @@ class SpvVaultSwaps {
                         const nextFoundTxData = foundTxins.get(nextUtxo) || this.root.prunedTxoMap.getTxinObject(nextUtxo);
                         if (nextFoundTxData == null)
                             break;
+                        processedUtxos.add(nextUtxo);
                         txsData.push(nextFoundTxData);
                     }
                     vaultWithdrawalTxs[this.getIdentifier(vault.getOwner(), vault.getVaultId())] = txsData;
@@ -189,6 +197,8 @@ class SpvVaultSwaps {
             }
             //Check all the txs, if they are already confirmed in these blocks
             for (let [utxo, vault] of this.txinMap.entries()) {
+                if (processedUtxos.has(utxo))
+                    continue;
                 const vaultIdentifier = this.getIdentifier(vault.getOwner(), vault.getVaultId());
                 if (vaultWithdrawalTxs[vaultIdentifier] == null)
                     continue;
