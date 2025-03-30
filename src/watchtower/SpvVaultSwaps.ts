@@ -171,6 +171,8 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
             }
         }
 
+        if(withdrawals.length===0) return null;
+
         let feeRate = undefined;
         let initAta = undefined;
         if(this.shouldClaimCbk!=null) {

@@ -137,6 +137,8 @@ class SpvVaultSwaps {
                     break;
                 }
             }
+            if (withdrawals.length === 0)
+                return null;
             let feeRate = undefined;
             let initAta = undefined;
             if (this.shouldClaimCbk != null) {
