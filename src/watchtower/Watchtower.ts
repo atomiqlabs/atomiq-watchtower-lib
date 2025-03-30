@@ -90,6 +90,8 @@ export class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
         //Get claim txs till the previously processed block
         const initialEscrowClaimTxs = await this.EscrowSwaps.getClaimTxs();
         const initialSpvVaultClaimTxs = await this.SpvVaultSwaps.getClaimTxs();
+        console.log("Watchtower: init(): Returned escrow claim txs: ", initialEscrowClaimTxs);
+        console.log("Watchtower: init(): Returned spv vault claim txs: ", initialEscrowClaimTxs);
 
         console.log("Watchtower: init(): Synced to last processed block");
 
@@ -114,9 +116,12 @@ export class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
         //Check txoHashes that got required confirmations in these blocks,
         // but they might be already pruned if we only checked after
         const {foundTxos, foundTxins} = await this.prunedTxoMap.syncToTipHash(tipBlockHash, this.EscrowSwaps.txoHashMap, this.SpvVaultSwaps.txinMap);
+        console.log("Watchtower: syncToTipHash(): Returned found txins: ", foundTxins);
 
         const escrowClaimTxs = await this.EscrowSwaps.getClaimTxs(foundTxos, computedHeaderMap);
         const spvVaultClaimTxs = await this.SpvVaultSwaps.getClaimTxs(foundTxins, computedHeaderMap);
+        console.log("Watchtower: syncToTipHash(): Returned escrow claim txs: ", escrowClaimTxs);
+        console.log("Watchtower: syncToTipHash(): Returned spv vault claim txs: ", spvVaultClaimTxs);
 
         return {
             ...escrowClaimTxs,

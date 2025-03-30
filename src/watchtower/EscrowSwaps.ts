@@ -236,6 +236,7 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
         const savedSwap = this.txoHashMap.get(txoHash);
         const requiredBlockHeight = data.height+savedSwap.swapData.getConfirmationsHint()-1;
         if(requiredBlockHeight<=tipHeight) {
+            console.log("EscrowSwaps: tryGetClaimTxs(): Getting claim txs for txoHash: "+txoHash+" txId: "+data.txId+" vout: "+data.vout);
             //Claimable
             try {
                 const unlock = savedSwap.lock(120);
@@ -280,6 +281,9 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
             } catch (e) {
                 console.error(e);
             }
+        } else {
+            console.log("EscrowSwaps: tryGetClaimTxs(): Cannot get claim txns yet, txoHash: "+txoHash+" requiredBlockheight: "+requiredBlockHeight+" tipHeight: "+txoHash);
+            return null
         }
     }
 
@@ -298,6 +302,7 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
         //Check txoHashes that got required confirmations in the to-be-synchronized blocks,
         // but they might be already pruned if we only checked after
         if(foundTxos!=null) {
+            console.log("EscrowSwaps: getClaimTxs(): Checking found txos: ", foundTxos);
             for(let entry of foundTxos.entries()) {
                 const txoHash = entry[0];
                 const data = entry[1];
@@ -306,6 +311,7 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
         }
 
         //Check all the txs, if they are already confirmed in these blocks
+        console.log("EscrowSwaps: getClaimTxs(): Checking all saved swaps...");
         for(let txoHash of this.txoHashMap.keys()) {
             if(txs[txoHash]!=null) continue;
             const data = this.root.prunedTxoMap.getTxoObject(txoHash);

@@ -37,6 +37,8 @@ class Watchtower {
             //Get claim txs till the previously processed block
             const initialEscrowClaimTxs = yield this.EscrowSwaps.getClaimTxs();
             const initialSpvVaultClaimTxs = yield this.SpvVaultSwaps.getClaimTxs();
+            console.log("Watchtower: init(): Returned escrow claim txs: ", initialEscrowClaimTxs);
+            console.log("Watchtower: init(): Returned spv vault claim txs: ", initialEscrowClaimTxs);
             console.log("Watchtower: init(): Synced to last processed block");
             //Sync watchtower to the btc relay height and get all the claim txs
             const postSyncClaimTxs = yield this.syncToTipHash(resp.resultBitcoinHeader.hash);
@@ -49,8 +51,11 @@ class Watchtower {
             //Check txoHashes that got required confirmations in these blocks,
             // but they might be already pruned if we only checked after
             const { foundTxos, foundTxins } = yield this.prunedTxoMap.syncToTipHash(tipBlockHash, this.EscrowSwaps.txoHashMap, this.SpvVaultSwaps.txinMap);
+            console.log("Watchtower: syncToTipHash(): Returned found txins: ", foundTxins);
             const escrowClaimTxs = yield this.EscrowSwaps.getClaimTxs(foundTxos, computedHeaderMap);
             const spvVaultClaimTxs = yield this.SpvVaultSwaps.getClaimTxs(foundTxins, computedHeaderMap);
+            console.log("Watchtower: syncToTipHash(): Returned escrow claim txs: ", escrowClaimTxs);
+            console.log("Watchtower: syncToTipHash(): Returned spv vault claim txs: ", spvVaultClaimTxs);
             return Object.assign(Object.assign({}, escrowClaimTxs), spvVaultClaimTxs);
         });
     }

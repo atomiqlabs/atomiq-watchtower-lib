@@ -123,6 +123,7 @@ class SpvVaultSwaps {
             for (let tx of txs) {
                 if (tx.height + vault.getConfirmations() - 1 > tipHeight)
                     break;
+                console.log("SpvVaultSwaps: tryGetClaimTxs(): Adding new tx to withdrawals, owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " btcTx: ", tx);
                 try {
                     const btcTx = yield this.root.bitcoinRpc.getTransaction(tx.txId);
                     const parsedTx = yield this.spvVaultContract.getWithdrawalData(btcTx);
@@ -139,7 +140,12 @@ class SpvVaultSwaps {
             let feeRate = undefined;
             let initAta = undefined;
             if (this.shouldClaimCbk != null) {
-                ({ feeRate, initAta } = yield this.shouldClaimCbk(vault, withdrawals));
+                const result = yield this.shouldClaimCbk(vault, withdrawals);
+                if (result == null) {
+                    console.log("SpvVaultSwaps: tryGetClaimTxs(): Not claiming due to negative response from claim cbk, owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " withdrawals: " + withdrawals.length);
+                    return null;
+                }
+                ({ feeRate, initAta } = result);
             }
             console.info("SpvVaultSwaps: tryGetClaimTxs(): Processing " + withdrawals.length + " withdrawals for vault: " + this.getIdentifier(vault.getOwner(), vault.getVaultId()));
             const resultTxs = yield this.spvVaultContract.txsClaim(this.root.signer.getAddress(), vault, withdrawals.map(((tx, index) => {
@@ -173,16 +179,20 @@ class SpvVaultSwaps {
             // but they might be already pruned if we only checked after
             const processedUtxos = new Set();
             if (foundTxins != null) {
+                console.log("SpvVaultSwaps: getClaimTxs(): Checking found txins: ", foundTxins);
                 for (let entry of foundTxins.entries()) {
                     const utxo = entry[0];
-                    if (processedUtxos.has(utxo))
+                    if (processedUtxos.has(utxo)) {
+                        console.log("SpvVaultSwaps: getClaimTxs(): Skipping utxo, already processed, utxo: ", processedUtxos);
                         continue;
+                    }
                     const vault = this.txinMap.get(utxo);
                     if (vault == null) {
                         console.warn("SpvVaultSwaps: getClaimTxs(): Skipping claiming of tx " + entry[1].txId + " because swap vault isn't known!");
                         continue;
                     }
                     const txsData = [entry[1]];
+                    console.log("SpvVaultSwaps: getClaimTxs(): Adding initial btc tx owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " btcTx: ", entry[1]);
                     //Try to also get next withdrawals
                     while (true) {
                         const nextUtxo = txsData[txsData.length - 1].txId + ":0";
@@ -191,27 +201,34 @@ class SpvVaultSwaps {
                             break;
                         processedUtxos.add(nextUtxo);
                         txsData.push(nextFoundTxData);
+                        console.log("SpvVaultSwaps: getClaimTxs(): Adding additional btc tx owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " btcTx: ", nextFoundTxData);
                     }
                     vaultWithdrawalTxs[this.getIdentifier(vault.getOwner(), vault.getVaultId())] = txsData;
                 }
             }
             //Check all the txs, if they are already confirmed in these blocks
             for (let [utxo, vault] of this.txinMap.entries()) {
-                if (processedUtxos.has(utxo))
+                if (processedUtxos.has(utxo)) {
+                    console.log("SpvVaultSwaps: getClaimTxs(): Skipping utxo, already processed, utxo: ", processedUtxos);
                     continue;
+                }
                 const vaultIdentifier = this.getIdentifier(vault.getOwner(), vault.getVaultId());
-                if (vaultWithdrawalTxs[vaultIdentifier] == null)
+                if (vaultWithdrawalTxs[vaultIdentifier] != null) {
+                    console.log("SpvVaultSwaps: getClaimTxs(): Skipping vault, already processed, owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10));
                     continue;
+                }
                 const data = this.root.prunedTxoMap.getTxinObject(utxo);
                 if (data == null)
                     continue;
                 const txsData = [data];
+                console.log("SpvVaultSwaps: getClaimTxs(): Adding initial btc tx owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " btcTx: ", data);
                 while (true) {
                     const nextUtxo = txsData[txsData.length - 1].txId + ":0";
                     const nextFoundTxData = this.root.prunedTxoMap.getTxinObject(nextUtxo);
                     if (nextFoundTxData == null)
                         break;
                     txsData.push(nextFoundTxData);
+                    console.log("SpvVaultSwaps: getClaimTxs(): Adding additional btc tx owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " btcTx: ", nextFoundTxData);
                 }
                 vaultWithdrawalTxs[vaultIdentifier] = txsData;
             }
