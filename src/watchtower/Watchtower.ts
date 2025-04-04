@@ -66,14 +66,14 @@ export class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
         this.bitcoinRpc = bitcoinRpc;
         this.prunedTxoMap = new PrunedTxMap(wtHeightStorageFile, bitcoinRpc, pruningFactor);
         this.EscrowSwaps = new EscrowSwaps(this, storage, swapContract, escrowShouldClaimCbk);
-        this.SpvVaultSwaps = new SpvVaultSwaps(this, vaultStorage, spvVaultDataDeserializer, spvVaultContract, vaultShouldClaimCbk)
+        if(spvVaultContract!=null) this.SpvVaultSwaps = new SpvVaultSwaps(this, vaultStorage, spvVaultDataDeserializer, spvVaultContract, vaultShouldClaimCbk)
     }
 
     async init(): Promise<{
         [identifier: string]: WatchtowerClaimTxType<T>
     }> {
         await this.EscrowSwaps.init();
-        await this.SpvVaultSwaps.init();
+        if(this.SpvVaultSwaps!=null) await this.SpvVaultSwaps.init();
 
         console.log("Watchtower: init(): Loaded!");
 
@@ -102,11 +102,11 @@ export class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
 
         //Check txoHashes that got required confirmations in these blocks,
         // but they might be already pruned if we only checked after
-        const {foundTxos, foundTxins} = await this.prunedTxoMap.syncToTipHash(newTipBlockHash, this.EscrowSwaps.txoHashMap, this.SpvVaultSwaps.txinMap);
+        const {foundTxos, foundTxins} = await this.prunedTxoMap.syncToTipHash(newTipBlockHash, this.EscrowSwaps.txoHashMap, this.SpvVaultSwaps?.txinMap);
         console.log("Watchtower: syncToTipHash(): Returned found txins: ", foundTxins);
 
         const escrowClaimTxs = await this.EscrowSwaps.getClaimTxs(foundTxos, computedHeaderMap);
-        const spvVaultClaimTxs = await this.SpvVaultSwaps.getClaimTxs(foundTxins, computedHeaderMap);
+        const spvVaultClaimTxs = this.SpvVaultSwaps==null ? {} : await this.SpvVaultSwaps.getClaimTxs(foundTxins, computedHeaderMap);
         console.log("Watchtower: syncToTipHash(): Returned escrow claim txs: ", escrowClaimTxs);
         console.log("Watchtower: syncToTipHash(): Returned spv vault claim txs: ", spvVaultClaimTxs);
 
