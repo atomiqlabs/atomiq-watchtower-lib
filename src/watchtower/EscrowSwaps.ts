@@ -310,7 +310,8 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
             for(let entry of foundTxos.entries()) {
                 const txoHash = entry[0];
                 const data = entry[1];
-                txs[txoHash] = await this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
+                const claimTxData = await this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
+                if(claimTxData!=null) txs[txoHash] = claimTxData;
             }
         }
 
@@ -320,7 +321,8 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
             if(txs[txoHash]!=null) continue;
             const data = this.root.prunedTxoMap.getTxoObject(txoHash);
             if(data==null) continue;
-            txs[txoHash] = await this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
+            const claimTxData = await this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
+            if(claimTxData!=null) txs[txoHash] = claimTxData;
         }
 
         return txs;

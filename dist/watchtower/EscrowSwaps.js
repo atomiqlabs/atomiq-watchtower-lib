@@ -255,7 +255,9 @@ class EscrowSwaps {
                 for (let entry of foundTxos.entries()) {
                     const txoHash = entry[0];
                     const data = entry[1];
-                    txs[txoHash] = yield this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
+                    const claimTxData = yield this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
+                    if (claimTxData != null)
+                        txs[txoHash] = claimTxData;
                 }
             }
             //Check all the txs, if they are already confirmed in these blocks
@@ -266,7 +268,9 @@ class EscrowSwaps {
                 const data = this.root.prunedTxoMap.getTxoObject(txoHash);
                 if (data == null)
                     continue;
-                txs[txoHash] = yield this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
+                const claimTxData = yield this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
+                if (claimTxData != null)
+                    txs[txoHash] = claimTxData;
             }
             return txs;
         });
