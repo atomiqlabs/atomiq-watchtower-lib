@@ -1,6 +1,6 @@
 {
   "name": "@atomiqlabs/watchtower-lib",
-  "version": "6.0.0-dev.9",
+  "version": "7.0.0-beta.0",
   "description": "atomiq watchtower functionality library",
   "main": "./dist/index.js",
   "types:": "./dist/index.d.ts",
@@ -22,7 +22,7 @@
   "author": "adambor",
   "license": "ISC",
   "dependencies": {
-    "@atomiqlabs/base": "github:atomiqlabs/atomiq-base#spv-swaps"
+    "@atomiqlabs/base": "^9.0.0-beta.0"
   },
   "devDependencies": {
     "@types/node": "18.18.3",
