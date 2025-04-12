@@ -34,47 +34,54 @@ class SpvVaultSwaps {
                 console.info("SpvVaultSwaps: init(): Vaults saved!");
             }
             this.root.swapEvents.registerListener((obj) => __awaiter(this, void 0, void 0, function* () {
-                const saveVaults = new Set();
                 for (let event of obj) {
                     if (!(event instanceof base_1.SpvVaultEvent))
                         continue;
+                    const identifier = this.getIdentifier(event.owner, event.vaultId);
+                    const existingVault = this.storage.data[identifier];
+                    let save = false;
                     if (event instanceof base_1.SpvVaultOpenEvent) {
                         //Add vault to the list of tracked vaults
-                        const identifier = this.getIdentifier(event.owner, event.vaultId);
-                        const existingVault = this.storage.data[identifier];
                         if (existingVault != null) {
+                            existingVault.updateState(event);
                             console.warn("SpvVaultSwaps: SC Event listener: Vault open event detected, but vault already saved, id: " + identifier);
-                            this.txinMap.delete(existingVault.getUtxo());
+                            save = true;
                         }
-                        saveVaults.add(identifier);
+                        else {
+                            console.debug("SpvVaultSwaps: SC Event listener: Open event detected, adding new vault id: " + identifier);
+                            yield this.save(yield this.spvVaultContract.getVaultData(event.owner, BigInt(event.vaultId)));
+                        }
                     }
-                    if (event instanceof base_1.SpvVaultClaimEvent) {
+                    else if (event instanceof base_1.SpvVaultClaimEvent) {
                         //Advance the state of the vault
-                        const identifier = this.getIdentifier(event.owner, event.vaultId);
-                        const existingVault = this.storage.data[identifier];
                         if (existingVault != null) {
-                            this.txinMap.delete(existingVault.getUtxo());
+                            const previousUtxo = existingVault.getUtxo();
+                            existingVault.updateState(event);
+                            if (previousUtxo !== existingVault.getUtxo()) {
+                                console.debug("SpvVaultSwaps: SC Event listener: Claim event processed, removing prior utxo: " + previousUtxo + " id: " + identifier);
+                                this.txinMap.delete(previousUtxo);
+                            }
+                            save = true;
                         }
                         else {
                             console.warn("SpvVaultSwaps: SC Event listener: Vault claim event detected, but vault not found, adding now, id: " + identifier);
                         }
-                        saveVaults.add(identifier);
                     }
-                    if (event instanceof base_1.SpvVaultCloseEvent) {
+                    else if (event instanceof base_1.SpvVaultCloseEvent) {
                         //Remove vault
                         const identifier = this.getIdentifier(event.owner, event.vaultId);
                         const existingVault = this.storage.data[identifier];
-                        if (existingVault == null) {
-                            console.warn("SpvVaultSwaps: SC Event listener: Vault close event detected, but vault already removed, id: " + identifier);
-                        }
-                        else {
+                        if (existingVault != null) {
+                            console.debug("SpvVaultSwaps: SC Event listener: Vault close detected, removing id: " + identifier);
                             yield this.remove(event.owner, event.vaultId);
                         }
+                        else {
+                            console.warn("SpvVaultSwaps: SC Event listener: Vault close event detected, but vault already removed, id: " + identifier);
+                        }
                     }
-                }
-                for (let identifier of saveVaults.keys()) {
-                    const [owner, vaultIdStr] = identifier.split("_");
-                    yield this.save(yield this.spvVaultContract.getVaultData(owner, BigInt(vaultIdStr)));
+                    if (save) {
+                        yield this.save(existingVault);
+                    }
                 }
                 return true;
             }));
@@ -241,6 +248,7 @@ class SpvVaultSwaps {
                 }
             }
             //Check all the txs, if they are already confirmed in these blocks
+            console.log("SpvVaultSwaps: getClaimTxs(): Checking all saved swaps...");
             for (let [utxo, vault] of this.txinMap.entries()) {
                 if (processedUtxos.has(utxo)) {
                     console.log("SpvVaultSwaps: getClaimTxs(): Skipping utxo, already processed, utxo: ", processedUtxos);

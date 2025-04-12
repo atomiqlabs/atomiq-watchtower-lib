@@ -53,46 +53,52 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
         }
 
         this.root.swapEvents.registerListener(async (obj: ChainEvent<T["Data"]>[]) => {
-            const saveVaults: Set<string> = new Set<string>();
             for(let event of obj) {
                 if(!(event instanceof SpvVaultEvent)) continue;
+                const identifier = this.getIdentifier(event.owner, event.vaultId);
+                const existingVault = this.storage.data[identifier];
+                let save = false;
+
                 if(event instanceof SpvVaultOpenEvent) {
                     //Add vault to the list of tracked vaults
-                    const identifier = this.getIdentifier(event.owner, event.vaultId);
-                    const existingVault = this.storage.data[identifier];
                     if(existingVault!=null) {
+                        existingVault.updateState(event);
                         console.warn("SpvVaultSwaps: SC Event listener: Vault open event detected, but vault already saved, id: "+identifier);
-                        this.txinMap.delete(existingVault.getUtxo());
+                        save = true;
+                    } else {
+                        console.debug("SpvVaultSwaps: SC Event listener: Open event detected, adding new vault id: "+identifier);
+                        await this.save(await this.spvVaultContract.getVaultData(event.owner, BigInt(event.vaultId)));
                     }
-                    saveVaults.add(identifier);
-                }
-                if(event instanceof SpvVaultClaimEvent) {
+                } else if(event instanceof SpvVaultClaimEvent) {
                     //Advance the state of the vault
-                    const identifier = this.getIdentifier(event.owner, event.vaultId);
-                    const existingVault = this.storage.data[identifier];
                     if(existingVault!=null) {
-                        this.txinMap.delete(existingVault.getUtxo());
+                        const previousUtxo = existingVault.getUtxo();
+                        existingVault.updateState(event);
+                        if(previousUtxo!==existingVault.getUtxo()) {
+                            console.debug("SpvVaultSwaps: SC Event listener: Claim event processed, removing prior utxo: "+previousUtxo+" id: "+identifier);
+                            this.txinMap.delete(previousUtxo);
+                        }
+                        save = true;
                     } else {
                         console.warn("SpvVaultSwaps: SC Event listener: Vault claim event detected, but vault not found, adding now, id: "+identifier);
                     }
-                    saveVaults.add(identifier);
-                }
-                if(event instanceof SpvVaultCloseEvent) {
+                } else if(event instanceof SpvVaultCloseEvent) {
                     //Remove vault
                     const identifier = this.getIdentifier(event.owner, event.vaultId);
                     const existingVault = this.storage.data[identifier];
-                    if(existingVault==null) {
-                        console.warn("SpvVaultSwaps: SC Event listener: Vault close event detected, but vault already removed, id: "+identifier);
-                    } else {
+                    if(existingVault!=null) {
+                        console.debug("SpvVaultSwaps: SC Event listener: Vault close detected, removing id: "+identifier);
                         await this.remove(event.owner, event.vaultId);
+                    } else {
+                        console.warn("SpvVaultSwaps: SC Event listener: Vault close event detected, but vault already removed, id: "+identifier);
                     }
+                }
+
+                if(save) {
+                    await this.save(existingVault);
                 }
             }
 
-            for(let identifier of saveVaults.keys()) {
-                const [owner, vaultIdStr] = identifier.split("_");
-                await this.save(await this.spvVaultContract.getVaultData(owner, BigInt(vaultIdStr)));
-            }
             return true;
         });
     }
@@ -293,6 +299,7 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
         }
 
         //Check all the txs, if they are already confirmed in these blocks
+        console.log("SpvVaultSwaps: getClaimTxs(): Checking all saved swaps...");
         for(let [utxo, vault] of this.txinMap.entries()) {
             if(processedUtxos.has(utxo)) {
                 console.log("SpvVaultSwaps: getClaimTxs(): Skipping utxo, already processed, utxo: ", processedUtxos);
