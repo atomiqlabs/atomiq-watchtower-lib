@@ -67,7 +67,8 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
                         save = true;
                     } else {
                         console.debug("SpvVaultSwaps: SC Event listener: Open event detected, adding new vault id: "+identifier);
-                        await this.save(await this.spvVaultContract.getVaultData(event.owner, BigInt(event.vaultId)));
+                        const vaultData = await this.spvVaultContract.getVaultData(event.owner, BigInt(event.vaultId));
+                        if(vaultData!=null) await this.save(vaultData);
                     }
                 } else if(event instanceof SpvVaultClaimEvent) {
                     //Advance the state of the vault

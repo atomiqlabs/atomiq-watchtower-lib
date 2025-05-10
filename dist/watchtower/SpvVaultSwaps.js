@@ -49,7 +49,9 @@ class SpvVaultSwaps {
                         }
                         else {
                             console.debug("SpvVaultSwaps: SC Event listener: Open event detected, adding new vault id: " + identifier);
-                            yield this.save(yield this.spvVaultContract.getVaultData(event.owner, BigInt(event.vaultId)));
+                            const vaultData = yield this.spvVaultContract.getVaultData(event.owner, BigInt(event.vaultId));
+                            if (vaultData != null)
+                                yield this.save(vaultData);
                         }
                     }
                     else if (event instanceof base_1.SpvVaultClaimEvent) {
