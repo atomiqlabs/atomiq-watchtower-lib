@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import { BitcoinRpc, BtcBlock, BtcBlockWithTxs } from "@atomiqlabs/base";
-export declare class PrunedTxoMap {
+export declare class PrunedTxMap {
     readonly txoMap: Map<string, {
         txId: string;
         vout: number;
@@ -33,7 +33,7 @@ export declare class PrunedTxoMap {
         }>;
     }>;
     static toTxoHash(value: number, outputScript: string): Buffer;
-    addBlock(headerHash: string, waitingForTxosMap?: Map<string, any>, waitingForTxinMap?: Map<string, any>, noSaveTipHeight?: boolean): Promise<{
+    addBlock(headerHash: string, waitingForTxosMap?: Map<string, any>, waitingForTxinMap?: Map<string, any>, newlyCreatedUtxos?: Set<string>, noSaveTipHeight?: boolean): Promise<{
         block: BtcBlockWithTxs;
         foundTxos: Map<string, {
             txId: string;
