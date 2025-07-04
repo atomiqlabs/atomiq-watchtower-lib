@@ -14,7 +14,7 @@ const PrunedTxMap_1 = require("./PrunedTxMap");
 const EscrowSwaps_1 = require("./EscrowSwaps");
 const SpvVaultSwaps_1 = require("./SpvVaultSwaps");
 const Utils_1 = require("../utils/Utils");
-const logger = (0, Utils_1.getLogger)("Watchtower");
+const logger = (0, Utils_1.getLogger)("Watchtower: ");
 class Watchtower {
     constructor(storage, vaultStorage, wtHeightStorageFile, btcRelay, chainEvents, swapContract, spvVaultContract, spvVaultDataDeserializer, signer, bitcoinRpc, pruningFactor, escrowShouldClaimCbk, vaultShouldClaimCbk) {
         this.btcRelay = btcRelay;
