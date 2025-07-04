@@ -13,6 +13,8 @@ exports.Watchtower = void 0;
 const PrunedTxMap_1 = require("./PrunedTxMap");
 const EscrowSwaps_1 = require("./EscrowSwaps");
 const SpvVaultSwaps_1 = require("./SpvVaultSwaps");
+const Utils_1 = require("../utils/Utils");
+const logger = (0, Utils_1.getLogger)("Watchtower");
 class Watchtower {
     constructor(storage, vaultStorage, wtHeightStorageFile, btcRelay, chainEvents, swapContract, spvVaultContract, spvVaultDataDeserializer, signer, bitcoinRpc, pruningFactor, escrowShouldClaimCbk, vaultShouldClaimCbk) {
         this.btcRelay = btcRelay;
@@ -29,14 +31,14 @@ class Watchtower {
             yield this.EscrowSwaps.init();
             if (this.SpvVaultSwaps != null)
                 yield this.SpvVaultSwaps.init();
-            console.log("Watchtower: init(): Loaded!");
+            logger.info("init(): Loaded!");
             //Sync to latest on Solana
             yield this.swapEvents.init();
-            console.log("Watchtower: init(): Synchronized smart chain events");
+            logger.info("init(): Synchronized smart chain events");
             const resp = yield this.btcRelay.retrieveLatestKnownBlockLog();
             //Sync to previously processed block
             yield this.prunedTxoMap.init(resp.resultBitcoinHeader.height);
-            console.log("Watchtower: init(): Synced to last processed block");
+            logger.info("init(): Synced to last processed block");
             //Sync watchtower to the btc relay height and get all the claim txs
             return yield this.syncToTipHash(resp.resultBitcoinHeader.hash);
         });
@@ -44,15 +46,15 @@ class Watchtower {
     syncToTipHash(newTipBlockHash, computedHeaderMap) {
         var _a;
         return __awaiter(this, void 0, void 0, function* () {
-            console.log("[Watchtower.syncToTipHash]: Syncing to tip hash: ", newTipBlockHash);
+            logger.info("syncToTipHash(): Syncing to tip hash: ", newTipBlockHash);
             //Check txoHashes that got required confirmations in these blocks,
             // but they might be already pruned if we only checked after
             const { foundTxos, foundTxins } = yield this.prunedTxoMap.syncToTipHash(newTipBlockHash, this.EscrowSwaps.txoHashMap, (_a = this.SpvVaultSwaps) === null || _a === void 0 ? void 0 : _a.txinMap);
-            console.log("Watchtower: syncToTipHash(): Returned found txins: ", foundTxins);
+            logger.debug("syncToTipHash(): Returned found txins: ", foundTxins);
             const escrowClaimTxs = yield this.EscrowSwaps.getClaimTxs(foundTxos, computedHeaderMap);
             const spvVaultClaimTxs = this.SpvVaultSwaps == null ? {} : yield this.SpvVaultSwaps.getClaimTxs(foundTxins, computedHeaderMap);
-            console.log("Watchtower: syncToTipHash(): Returned escrow claim txs: ", escrowClaimTxs);
-            console.log("Watchtower: syncToTipHash(): Returned spv vault claim txs: ", spvVaultClaimTxs);
+            logger.debug("syncToTipHash(): Returned escrow claim txs: ", escrowClaimTxs);
+            logger.debug("syncToTipHash(): Returned spv vault claim txs: ", spvVaultClaimTxs);
             return Object.assign(Object.assign({}, escrowClaimTxs), spvVaultClaimTxs);
         });
     }

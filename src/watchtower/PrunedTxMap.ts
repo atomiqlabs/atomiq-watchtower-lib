@@ -1,7 +1,9 @@
 import {createHash} from "crypto";
 import * as fs from "fs/promises";
 import {BitcoinRpc, BtcBlock, BtcBlockWithTxs} from "@atomiqlabs/base";
+import {getLogger} from "../utils/Utils";
 
+const logger = getLogger("PrunedTxMap: ");
 
 export class PrunedTxMap {
 
@@ -66,7 +68,7 @@ export class PrunedTxMap {
             height: number
         }>
     }> {
-        console.log("[PrunedTxoMap]: Syncing to tip hash: ", tipBlockHash);
+        logger.info("syncToTipHash(): Syncing to tip hash: ", tipBlockHash);
 
         const blockHashes = [tipBlockHash];
         while(true) {
@@ -109,7 +111,7 @@ export class PrunedTxMap {
             if(val!=null) totalFoundTxins.set(key, val);
         });
 
-        console.log("[PrunedTxoMap]: Syncing through blockhashes: ", blockHashes);
+        logger.debug("syncToTipHash(): Syncing through blockhashes: ", blockHashes);
 
         const newlyCreatedUtxos = new Set<string>();
         for(let i=blockHashes.length-1;i>=0;i--) {
@@ -157,7 +159,7 @@ export class PrunedTxMap {
 
         const block: BtcBlockWithTxs = await this.bitcoinRpc.getBlockWithTransactions(headerHash);
 
-        console.log("[PrunedTxoMap]: Adding block  "+block.height+", hash: ", block.hash);
+        logger.info("addBlock(): Adding block  "+block.height+", hash: ", block.hash);
         if(!noSaveTipHeight) {
             this.tipHeight = block.height;
             await fs.writeFile(this.filename, this.tipHeight.toString());
@@ -177,7 +179,7 @@ export class PrunedTxMap {
         const blockTxins: string[] = [];
 
         if(this.blocksMap.has(block.height)) {
-            console.log("[PrunedTxoMap]: Fork block hash: ", block.hash);
+            logger.info("addBlock(): Fork block hash: ", block.hash);
             //Forked off
             for(let txoHash of this.blocksMap.get(block.height).txoHashes) {
                 this.txoMap.delete(txoHash.toString("hex"));
@@ -237,7 +239,7 @@ export class PrunedTxMap {
         //Pruned
         const pruneBlockheight = block.height-this.pruningFactor;
         if(this.blocksMap.has(pruneBlockheight)) {
-            console.log("[PrunedTxoMap]: Pruning block height: ", pruneBlockheight);
+            logger.debug("addBlock(): Pruning block height: ", pruneBlockheight);
             const prunedBlock = this.blocksMap.get(pruneBlockheight);
             for(let txoHash of prunedBlock.txoHashes) {
                 this.txoMap.delete(txoHash.toString("hex"));
