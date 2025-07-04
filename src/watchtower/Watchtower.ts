@@ -32,7 +32,7 @@ export type WatchtowerClaimTxType<T extends ChainType> = {
     data: WatchtowerEscrowClaimData<T> | WatchtowerSpvVaultClaimData<T>
 };
 
-const logger = getLogger("Watchtower");
+const logger = getLogger("Watchtower: ");
 
 export class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
 
