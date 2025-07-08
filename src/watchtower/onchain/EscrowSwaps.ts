@@ -1,4 +1,4 @@
-import {SavedSwap} from "./SavedSwap";
+import {SavedSwap} from "../SavedSwap";
 import {PrunedTxMap} from "./PrunedTxMap";
 import {
     BtcStoredHeader, ChainEvent, ChainSwapType,
@@ -8,8 +8,8 @@ import {
     SwapDataVerificationError,
     SwapEvent
 } from "@atomiqlabs/base";
-import {Watchtower, WatchtowerClaimTxType} from "./Watchtower";
-import {getLogger} from "../utils/Utils";
+import {BtcRelayWatchtower, WatchtowerClaimTxType} from "./BtcRelayWatchtower";
+import {getLogger} from "../../utils/Utils";
 
 const logger = getLogger("EscrowSwaps: ")
 
@@ -22,12 +22,12 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
 
     readonly swapContract: T["Contract"];
 
-    readonly root: Watchtower<T, B>;
+    readonly root: BtcRelayWatchtower<T, B>;
 
     readonly shouldClaimCbk?: (swap: SavedSwap<T>) => Promise<{initAta: boolean, feeRate: any}>;
 
     constructor(
-        root: Watchtower<T, B>,
+        root: BtcRelayWatchtower<T, B>,
         storage: IStorageManager<SavedSwap<T>>,
         swapContract: T["Contract"],
         shouldClaimCbk?: (swap: SavedSwap<T>) => Promise<{initAta: boolean, feeRate: any}>
@@ -36,10 +36,6 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
         this.storage = storage;
         this.swapContract = swapContract;
         this.shouldClaimCbk = shouldClaimCbk;
-    }
-
-    async init() {
-        await this.load();
 
         this.root.swapEvents.registerListener(async (obj: ChainEvent<T["Data"]>[]) => {
             for(let event of obj) {
@@ -83,6 +79,10 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
             }
             return true;
         });
+    }
+
+    async init() {
+        await this.load();
     }
 
     private async load() {

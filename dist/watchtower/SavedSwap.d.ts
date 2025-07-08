@@ -7,4 +7,5 @@ export declare class SavedSwap<T extends ChainType> extends Lockable {
     constructor(data: any);
     constructor(txoHash: Buffer, swapData: T["Data"]);
     serialize(): any;
+    static fromSwapData<T extends ChainType>(swapData: T["Data"]): SavedSwap<T>;
 }
