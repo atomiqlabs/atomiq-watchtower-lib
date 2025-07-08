@@ -1,1 +1,3 @@
-export * from "./watchtower/Watchtower";
+export * from "./watchtower/onchain/BtcRelayWatchtower";
+export * from "./watchtower/HashlockWatchtower";
+export * from "./watchtower/HashlockSavedWatchtower";

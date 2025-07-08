@@ -27,4 +27,8 @@ export class SavedSwap<T extends ChainType> extends Lockable {
         }
     }
 
+    static fromSwapData<T extends ChainType>(swapData: T["Data"]): SavedSwap<T> {
+        return new SavedSwap<T>(Buffer.from(swapData.getTxoHashHint(), "hex"), swapData);
+    }
+
 }

@@ -1,5 +1,5 @@
 import {PrunedTxMap} from "./PrunedTxMap";
-import {SavedSwap} from "./SavedSwap";
+import {SavedSwap} from "../SavedSwap";
 import {
     BtcStoredHeader,
     BitcoinRpc,
@@ -7,7 +7,7 @@ import {
 } from "@atomiqlabs/base";
 import { EscrowSwaps } from "./EscrowSwaps";
 import { SpvVaultSwaps } from "./SpvVaultSwaps";
-import {getLogger} from "../utils/Utils";
+import {getLogger} from "../../utils/Utils";
 
 export type WatchtowerEscrowClaimData<T extends ChainType> = {
     txId: string,
@@ -34,7 +34,7 @@ export type WatchtowerClaimTxType<T extends ChainType> = {
 
 const logger = getLogger("Watchtower: ");
 
-export class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
+export class BtcRelayWatchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
 
     readonly btcRelay: T["BtcRelay"];
 
@@ -72,19 +72,15 @@ export class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
         if(spvVaultContract!=null) this.SpvVaultSwaps = new SpvVaultSwaps(this, vaultStorage, spvVaultDataDeserializer, spvVaultContract, vaultShouldClaimCbk)
     }
 
-    async init(): Promise<{
-        [identifier: string]: WatchtowerClaimTxType<T>
-    }> {
+    async init(): Promise<void> {
         await this.EscrowSwaps.init();
         if(this.SpvVaultSwaps!=null) await this.SpvVaultSwaps.init();
-
         logger.info("init(): Loaded!");
+    }
 
-        //Sync to latest on Solana
-        await this.swapEvents.init();
-
-        logger.info("init(): Synchronized smart chain events");
-
+    async initialSync(): Promise<{
+        [identifier: string]: WatchtowerClaimTxType<T>
+    }> {
         const resp = await this.btcRelay.retrieveLatestKnownBlockLog();
 
         //Sync to previously processed block
@@ -92,7 +88,7 @@ export class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
         logger.info("init(): Synced to last processed block");
 
         //Sync watchtower to the btc relay height and get all the claim txs
-        return  await this.syncToTipHash(resp.resultBitcoinHeader.hash);
+        return await this.syncToTipHash(resp.resultBitcoinHeader.hash);
     }
 
     async syncToTipHash(

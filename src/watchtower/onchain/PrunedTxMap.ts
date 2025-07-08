@@ -1,7 +1,7 @@
 import {createHash} from "crypto";
 import * as fs from "fs/promises";
 import {BitcoinRpc, BtcBlock, BtcBlockWithTxs} from "@atomiqlabs/base";
-import {getLogger} from "../utils/Utils";
+import {getLogger} from "../../utils/Utils";
 
 const logger = getLogger("PrunedTxMap: ");
 

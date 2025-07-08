@@ -21,5 +21,8 @@ class SavedSwap extends Lockable_1.Lockable {
             swapData: this.swapData.serialize()
         };
     }
+    static fromSwapData(swapData) {
+        return new SavedSwap(Buffer.from(swapData.getTxoHashHint(), "hex"), swapData);
+    }
 }
 exports.SavedSwap = SavedSwap;

@@ -1,4 +1,4 @@
-import { SavedSwap } from "./SavedSwap";
+import { SavedSwap } from "../SavedSwap";
 import { BtcStoredHeader, ChainType, IStorageManager } from "@atomiqlabs/base";
 import { BtcRelayWatchtower, WatchtowerClaimTxType } from "./BtcRelayWatchtower";
 export declare class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
