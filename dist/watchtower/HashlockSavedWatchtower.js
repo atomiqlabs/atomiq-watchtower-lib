@@ -13,10 +13,12 @@ exports.HashlockSavedWatchtower = void 0;
 const base_1 = require("@atomiqlabs/base");
 const Utils_1 = require("../utils/Utils");
 const SavedSwap_1 = require("./SavedSwap");
+const PrunedSecretsMap_1 = require("../utils/PrunedSecretsMap");
 const logger = (0, Utils_1.getLogger)("HashlockWatchtower: ");
 class HashlockSavedWatchtower {
     constructor(storage, messenger, chainEvents, swapContract, swapDataType, signer, escrowShouldClaimCbk) {
         this.escrowHashMap = new Map();
+        this.secretsMap = new PrunedSecretsMap_1.PrunedSecretsMap();
         this.storage = storage;
         this.swapEvents = chainEvents;
         this.swapContract = swapContract;
@@ -37,6 +39,20 @@ class HashlockSavedWatchtower {
                     const savedSwap = new SavedSwap_1.SavedSwap(txoHash, swapData);
                     logger.info("chainsEventListener: Adding new swap to watchlist: ", savedSwap);
                     yield this.save(savedSwap);
+                    const escrowHash = swapData.getEscrowHash();
+                    const witness = this.secretsMap.get(escrowHash);
+                    if (witness == null)
+                        return;
+                    if (this.claimsInProcess[escrowHash] != null) {
+                        logger.debug("chainsEventListener: Skipping escrowHash: " + escrowHash + " due to already being processed!");
+                        return;
+                    }
+                    this.claimsInProcess[escrowHash] = this.claim(swapData, witness).then(() => {
+                        delete this.claimsInProcess[escrowHash];
+                    }, (e) => {
+                        logger.error("chainsEventListener: Error when claiming swap escrowHash: " + escrowHash);
+                        delete this.claimsInProcess[escrowHash];
+                    });
                 }
                 else {
                     const success = yield this.remove(event.escrowHash);
@@ -120,6 +136,7 @@ class HashlockSavedWatchtower {
                     return;
                 }
                 const escrowHash = msg.swapData.getEscrowHash();
+                this.secretsMap.set(escrowHash, msg.witness);
                 if (!this.escrowHashMap.has(escrowHash)) {
                     logger.debug("messageListener: Skipping escrowHash: " + escrowHash + " due to swap not being initiated!");
                     return;

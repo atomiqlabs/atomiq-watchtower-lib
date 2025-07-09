@@ -11,6 +11,7 @@ import {
 } from "@atomiqlabs/base";
 import {getLogger} from "../utils/Utils";
 import {SavedSwap} from "./SavedSwap";
+import {PrunedSecretsMap} from "../utils/PrunedSecretsMap";
 
 
 const logger = getLogger("HashlockWatchtower: ");
@@ -27,6 +28,7 @@ export class HashlockSavedWatchtower<T extends ChainType> {
     readonly messenger: Messenger;
 
     readonly escrowHashMap: Map<string, SavedSwap<T>> = new Map<string, SavedSwap<T>>();
+    readonly secretsMap: PrunedSecretsMap = new PrunedSecretsMap();
 
     constructor(
         storage: IStorageManager<SavedSwap<T>>,
@@ -60,6 +62,21 @@ export class HashlockSavedWatchtower<T extends ChainType> {
                     logger.info("chainsEventListener: Adding new swap to watchlist: ", savedSwap);
 
                     await this.save(savedSwap);
+
+                    const escrowHash = swapData.getEscrowHash()
+                    const witness = this.secretsMap.get(escrowHash);
+                    if(witness==null) return;
+
+                    if(this.claimsInProcess[escrowHash]!=null) {
+                        logger.debug("chainsEventListener: Skipping escrowHash: "+escrowHash+" due to already being processed!");
+                        return;
+                    }
+                    this.claimsInProcess[escrowHash] = this.claim(swapData as T["Data"], witness).then(() => {
+                        delete this.claimsInProcess[escrowHash];
+                    }, (e) => {
+                        logger.error("chainsEventListener: Error when claiming swap escrowHash: "+escrowHash);
+                        delete this.claimsInProcess[escrowHash];
+                    });
                 } else {
                     const success = await this.remove(event.escrowHash);
                     if(success) {
@@ -130,6 +147,7 @@ export class HashlockSavedWatchtower<T extends ChainType> {
                 return;
             }
             const escrowHash = msg.swapData.getEscrowHash();
+            this.secretsMap.set(escrowHash, msg.witness);
             if(!this.escrowHashMap.has(escrowHash)) {
                 logger.debug("messageListener: Skipping escrowHash: "+escrowHash+" due to swap not being initiated!");
                 return;
