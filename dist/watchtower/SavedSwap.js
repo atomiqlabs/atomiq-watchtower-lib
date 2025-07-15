@@ -11,18 +11,18 @@ class SavedSwap extends Lockable_1.Lockable {
             this.swapData = swapData;
         }
         else {
-            this.txoHash = Buffer.from(txoHashOrObj.txoHash, "hex");
+            this.txoHash = txoHashOrObj.txoHash == null ? null : Buffer.from(txoHashOrObj.txoHash, "hex");
             this.swapData = base_1.SwapData.deserialize(txoHashOrObj.swapData);
         }
     }
     serialize() {
         return {
-            txoHash: this.txoHash.toString("hex"),
+            txoHash: this.txoHash == null ? null : this.txoHash.toString("hex"),
             swapData: this.swapData.serialize()
         };
     }
     static fromSwapData(swapData) {
-        return new SavedSwap(Buffer.from(swapData.getTxoHashHint(), "hex"), swapData);
+        return new SavedSwap(swapData.getTxoHashHint() == null ? null : Buffer.from(swapData.getTxoHashHint(), "hex"), swapData);
     }
 }
 exports.SavedSwap = SavedSwap;

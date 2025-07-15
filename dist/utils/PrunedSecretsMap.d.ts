@@ -4,6 +4,6 @@ export declare class PrunedSecretsMap {
     nextIndex: number;
     secretsMap: Map<string, string>;
     constructor(maxSize?: number);
-    set(escrowHash: string, secret: string): void;
+    set(escrowHash: string, secret: string): boolean;
     get(escrowHash: string): string;
 }

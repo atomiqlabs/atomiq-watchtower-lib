@@ -12,6 +12,7 @@ import {
 import {getLogger} from "../utils/Utils";
 import {SavedSwap} from "./SavedSwap";
 import {PrunedSecretsMap} from "../utils/PrunedSecretsMap";
+import {createHash} from "crypto";
 
 
 const logger = getLogger("HashlockWatchtower: ");
@@ -56,8 +57,7 @@ export class HashlockSavedWatchtower<T extends ChainType> {
 
                     const swapData = await event.swapData();
 
-                    const txoHash: Buffer = Buffer.from(swapData.getTxoHashHint(), "hex");
-                    const savedSwap: SavedSwap<T> = new SavedSwap<T>(txoHash, swapData);
+                    const savedSwap: SavedSwap<T> = SavedSwap.fromSwapData(swapData);
 
                     logger.info("chainsEventListener: Adding new swap to watchlist: ", savedSwap);
 
@@ -124,7 +124,7 @@ export class HashlockSavedWatchtower<T extends ChainType> {
         logger.info("claim(): Claimed successfully escrowHash: "+swapData.getEscrowHash()+" with witness: "+witness+"!");
     }
 
-    readonly claimsInProcess: {[escrowHash: string]: Promise<void>};
+    readonly claimsInProcess: {[escrowHash: string]: Promise<void>} = {};
 
     async init(): Promise<void> {
         await this.load();
@@ -141,13 +141,14 @@ export class HashlockSavedWatchtower<T extends ChainType> {
             try {
                 const parsedWitness = Buffer.from(msg.witness, "hex");
                 if(parsedWitness.length!==32) return;
-                const expectedClaimHash = this.swapContract.getHashForHtlc(parsedWitness);
+                const paymentHash = createHash("sha256").update(parsedWitness).digest();
+                const expectedClaimHash = this.swapContract.getHashForHtlc(paymentHash);
                 if(msg.swapData.getClaimHash()!==expectedClaimHash.toString("hex")) return;
             } catch (e) {
                 return;
             }
             const escrowHash = msg.swapData.getEscrowHash();
-            this.secretsMap.set(escrowHash, msg.witness);
+            if(this.secretsMap.set(escrowHash, msg.witness)) logger.debug("messageListener: Added new known secret: "+msg.witness+" escrowHash: "+escrowHash);
             if(!this.escrowHashMap.has(escrowHash)) {
                 logger.debug("messageListener: Skipping escrowHash: "+escrowHash+" due to swap not being initiated!");
                 return;
@@ -156,6 +157,7 @@ export class HashlockSavedWatchtower<T extends ChainType> {
                 logger.debug("messageListener: Skipping escrowHash: "+escrowHash+" due to already being processed!");
                 return;
             }
+            logger.info("messageListener: Attempting to claim escrowHash: "+escrowHash+" with secret: "+msg.witness+"!");
             this.claimsInProcess[escrowHash] = this.claim(msg.swapData as T["Data"], msg.witness).then(() => {
                 delete this.claimsInProcess[escrowHash];
             }, (e) => {
