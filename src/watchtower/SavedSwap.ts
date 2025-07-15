@@ -15,20 +15,20 @@ export class SavedSwap<T extends ChainType> extends Lockable {
             this.txoHash = txoHashOrObj;
             this.swapData = swapData;
         } else {
-            this.txoHash = Buffer.from(txoHashOrObj.txoHash, "hex");
+            this.txoHash = txoHashOrObj.txoHash==null ? null : Buffer.from(txoHashOrObj.txoHash, "hex");
             this.swapData = SwapData.deserialize(txoHashOrObj.swapData);
         }
     }
 
     serialize(): any {
         return {
-            txoHash: this.txoHash.toString("hex"),
+            txoHash: this.txoHash==null ? null : this.txoHash.toString("hex"),
             swapData: this.swapData.serialize()
         }
     }
 
     static fromSwapData<T extends ChainType>(swapData: T["Data"]): SavedSwap<T> {
-        return new SavedSwap<T>(Buffer.from(swapData.getTxoHashHint(), "hex"), swapData);
+        return new SavedSwap<T>(swapData.getTxoHashHint()==null ? null : Buffer.from(swapData.getTxoHashHint(), "hex"), swapData);
     }
 
 }

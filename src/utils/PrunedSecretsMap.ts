@@ -12,7 +12,9 @@ export class PrunedSecretsMap {
         this.secretsMap = new Map();
     }
 
-    set(escrowHash: string, secret: string) {
+    set(escrowHash: string, secret: string): boolean {
+        if(this.secretsMap.has(escrowHash)) return false;
+
         const oldId = this.buffer[this.nextIndex];
         if (oldId !== undefined) {
             this.secretsMap.delete(oldId);
@@ -22,6 +24,7 @@ export class PrunedSecretsMap {
         this.secretsMap.set(escrowHash, secret);
 
         this.nextIndex = (this.nextIndex + 1) % this.maxSize;
+        return true;
     }
 
     get(escrowHash: string): string {

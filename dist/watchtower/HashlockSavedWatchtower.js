@@ -14,11 +14,13 @@ const base_1 = require("@atomiqlabs/base");
 const Utils_1 = require("../utils/Utils");
 const SavedSwap_1 = require("./SavedSwap");
 const PrunedSecretsMap_1 = require("../utils/PrunedSecretsMap");
+const crypto_1 = require("crypto");
 const logger = (0, Utils_1.getLogger)("HashlockWatchtower: ");
 class HashlockSavedWatchtower {
     constructor(storage, messenger, chainEvents, swapContract, swapDataType, signer, escrowShouldClaimCbk) {
         this.escrowHashMap = new Map();
         this.secretsMap = new PrunedSecretsMap_1.PrunedSecretsMap();
+        this.claimsInProcess = {};
         this.storage = storage;
         this.swapEvents = chainEvents;
         this.swapContract = swapContract;
@@ -35,8 +37,7 @@ class HashlockSavedWatchtower {
                     if (event.swapType !== base_1.ChainSwapType.HTLC)
                         continue;
                     const swapData = yield event.swapData();
-                    const txoHash = Buffer.from(swapData.getTxoHashHint(), "hex");
-                    const savedSwap = new SavedSwap_1.SavedSwap(txoHash, swapData);
+                    const savedSwap = SavedSwap_1.SavedSwap.fromSwapData(swapData);
                     logger.info("chainsEventListener: Adding new swap to watchlist: ", savedSwap);
                     yield this.save(savedSwap);
                     const escrowHash = swapData.getEscrowHash();
@@ -128,7 +129,8 @@ class HashlockSavedWatchtower {
                     const parsedWitness = Buffer.from(msg.witness, "hex");
                     if (parsedWitness.length !== 32)
                         return;
-                    const expectedClaimHash = this.swapContract.getHashForHtlc(parsedWitness);
+                    const paymentHash = (0, crypto_1.createHash)("sha256").update(parsedWitness).digest();
+                    const expectedClaimHash = this.swapContract.getHashForHtlc(paymentHash);
                     if (msg.swapData.getClaimHash() !== expectedClaimHash.toString("hex"))
                         return;
                 }
@@ -136,7 +138,8 @@ class HashlockSavedWatchtower {
                     return;
                 }
                 const escrowHash = msg.swapData.getEscrowHash();
-                this.secretsMap.set(escrowHash, msg.witness);
+                if (this.secretsMap.set(escrowHash, msg.witness))
+                    logger.debug("messageListener: Added new known secret: " + msg.witness + " escrowHash: " + escrowHash);
                 if (!this.escrowHashMap.has(escrowHash)) {
                     logger.debug("messageListener: Skipping escrowHash: " + escrowHash + " due to swap not being initiated!");
                     return;
@@ -145,6 +148,7 @@ class HashlockSavedWatchtower {
                     logger.debug("messageListener: Skipping escrowHash: " + escrowHash + " due to already being processed!");
                     return;
                 }
+                logger.info("messageListener: Attempting to claim escrowHash: " + escrowHash + " with secret: " + msg.witness + "!");
                 this.claimsInProcess[escrowHash] = this.claim(msg.swapData, msg.witness).then(() => {
                     delete this.claimsInProcess[escrowHash];
                 }, (e) => {
