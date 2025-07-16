@@ -65,11 +65,11 @@ export class HashlockSavedWatchtower<T extends ChainType> {
 
                     const escrowHash = swapData.getEscrowHash()
                     const witness = this.secretsMap.get(escrowHash);
-                    if(witness==null) return;
+                    if(witness==null) continue;
 
                     if(this.claimsInProcess[escrowHash]!=null) {
                         logger.debug("chainsEventListener: Skipping escrowHash: "+escrowHash+" due to already being processed!");
-                        return;
+                        continue;
                     }
                     this.claimsInProcess[escrowHash] = this.claim(swapData as T["Data"], witness).then(() => {
                         delete this.claimsInProcess[escrowHash];
