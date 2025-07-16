@@ -15,5 +15,4 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./watchtower/onchain/BtcRelayWatchtower"), exports);
-__exportStar(require("./watchtower/HashlockWatchtower"), exports);
 __exportStar(require("./watchtower/HashlockSavedWatchtower"), exports);

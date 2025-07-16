@@ -68,12 +68,12 @@ export class BtcRelayWatchtower<T extends ChainType, B extends BtcStoredHeader<a
         this.signer = signer;
         this.bitcoinRpc = bitcoinRpc;
         this.prunedTxoMap = new PrunedTxMap(wtHeightStorageFile, bitcoinRpc, pruningFactor);
-        this.EscrowSwaps = new EscrowSwaps(this, storage, swapContract, escrowShouldClaimCbk);
+        if(swapContract!=null) this.EscrowSwaps = new EscrowSwaps(this, storage, swapContract, escrowShouldClaimCbk);
         if(spvVaultContract!=null) this.SpvVaultSwaps = new SpvVaultSwaps(this, vaultStorage, spvVaultDataDeserializer, spvVaultContract, vaultShouldClaimCbk)
     }
 
     async init(): Promise<void> {
-        await this.EscrowSwaps.init();
+        if(this.EscrowSwaps!=null) await this.EscrowSwaps.init();
         if(this.SpvVaultSwaps!=null) await this.SpvVaultSwaps.init();
         logger.info("init(): Loaded!");
     }
@@ -101,10 +101,10 @@ export class BtcRelayWatchtower<T extends ChainType, B extends BtcStoredHeader<a
 
         //Check txoHashes that got required confirmations in these blocks,
         // but they might be already pruned if we only checked after
-        const {foundTxos, foundTxins} = await this.prunedTxoMap.syncToTipHash(newTipBlockHash, this.EscrowSwaps.txoHashMap, this.SpvVaultSwaps?.txinMap);
+        const {foundTxos, foundTxins} = await this.prunedTxoMap.syncToTipHash(newTipBlockHash, this.EscrowSwaps?.txoHashMap, this.SpvVaultSwaps?.txinMap);
         logger.debug("syncToTipHash(): Returned found txins: ", foundTxins);
 
-        const escrowClaimTxs = await this.EscrowSwaps.getClaimTxs(foundTxos, computedHeaderMap);
+        const escrowClaimTxs = this.EscrowSwaps==null ? {} : await this.EscrowSwaps.getClaimTxs(foundTxos, computedHeaderMap);
         const spvVaultClaimTxs = this.SpvVaultSwaps==null ? {} : await this.SpvVaultSwaps.getClaimTxs(foundTxins, computedHeaderMap);
         logger.debug("syncToTipHash(): Returned escrow claim txs: ", escrowClaimTxs);
         logger.debug("syncToTipHash(): Returned spv vault claim txs: ", spvVaultClaimTxs);
