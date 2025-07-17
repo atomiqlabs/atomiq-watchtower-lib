@@ -44,6 +44,7 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
                     if(event.swapType!==ChainSwapType.CHAIN) continue;
 
                     const swapData = await event.swapData();
+                    if(swapData.hasSuccessAction()) continue;
                     if(swapData.getTxoHashHint()==null || swapData.getConfirmationsHint()==null) {
                         logger.warn("chainsEventListener: Skipping escrow "+swapData.getEscrowHash()+" due to missing txoHash & confirmations hint");
                         continue;

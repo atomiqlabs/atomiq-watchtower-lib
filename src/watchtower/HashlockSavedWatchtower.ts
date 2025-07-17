@@ -56,6 +56,7 @@ export class HashlockSavedWatchtower<T extends ChainType> {
                     if(event.swapType!==ChainSwapType.HTLC) continue;
 
                     const swapData = await event.swapData();
+                    if(swapData.hasSuccessAction()) continue;
 
                     const savedSwap: SavedSwap<T> = SavedSwap.fromSwapData(swapData);
 
@@ -73,8 +74,10 @@ export class HashlockSavedWatchtower<T extends ChainType> {
                     }
                     this.claimsInProcess[escrowHash] = this.claim(swapData as T["Data"], witness).then(() => {
                         delete this.claimsInProcess[escrowHash];
+                        logger.debug("chainsEventListener: Removing swap escrowHash: "+escrowHash+" due to claim being successful!");
+                        this.remove(swapData);
                     }, (e) => {
-                        logger.error("chainsEventListener: Error when claiming swap escrowHash: "+escrowHash);
+                        logger.error("chainsEventListener: Error when claiming swap escrowHash: "+escrowHash, e);
                         delete this.claimsInProcess[escrowHash];
                     });
                 } else {

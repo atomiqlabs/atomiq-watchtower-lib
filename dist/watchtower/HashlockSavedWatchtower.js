@@ -37,6 +37,8 @@ class HashlockSavedWatchtower {
                     if (event.swapType !== base_1.ChainSwapType.HTLC)
                         continue;
                     const swapData = yield event.swapData();
+                    if (swapData.hasSuccessAction())
+                        continue;
                     const savedSwap = SavedSwap_1.SavedSwap.fromSwapData(swapData);
                     logger.info("chainsEventListener: Adding new swap to watchlist: ", savedSwap);
                     yield this.save(savedSwap);
@@ -50,8 +52,10 @@ class HashlockSavedWatchtower {
                     }
                     this.claimsInProcess[escrowHash] = this.claim(swapData, witness).then(() => {
                         delete this.claimsInProcess[escrowHash];
+                        logger.debug("chainsEventListener: Removing swap escrowHash: " + escrowHash + " due to claim being successful!");
+                        this.remove(swapData);
                     }, (e) => {
-                        logger.error("chainsEventListener: Error when claiming swap escrowHash: " + escrowHash);
+                        logger.error("chainsEventListener: Error when claiming swap escrowHash: " + escrowHash, e);
                         delete this.claimsInProcess[escrowHash];
                     });
                 }
