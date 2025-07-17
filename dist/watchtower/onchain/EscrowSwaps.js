@@ -31,6 +31,8 @@ class EscrowSwaps {
                     if (event.swapType !== base_1.ChainSwapType.CHAIN)
                         continue;
                     const swapData = yield event.swapData();
+                    if (swapData.hasSuccessAction())
+                        continue;
                     if (swapData.getTxoHashHint() == null || swapData.getConfirmationsHint() == null) {
                         logger.warn("chainsEventListener: Skipping escrow " + swapData.getEscrowHash() + " due to missing txoHash & confirmations hint");
                         continue;

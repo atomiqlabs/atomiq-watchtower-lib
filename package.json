@@ -1,6 +1,6 @@
 {
   "name": "@atomiqlabs/watchtower-lib",
-  "version": "8.0.0-dev.8",
+  "version": "8.0.0-dev.9",
   "description": "atomiq watchtower functionality library",
   "main": "./dist/index.js",
   "types:": "./dist/index.d.ts",
@@ -22,7 +22,7 @@
   "author": "adambor",
   "license": "ISC",
   "dependencies": {
-    "@atomiqlabs/base": "^10.0.0-dev.7"
+    "@atomiqlabs/base": "^10.0.0-dev.8"
   },
   "devDependencies": {
     "@types/node": "18.18.3",
