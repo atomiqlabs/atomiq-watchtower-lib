@@ -169,6 +169,12 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
             logger.debug("tryGetClaimTxs(): Adding new tx to withdrawals, owner: "+vault.getOwner()+" vaultId: "+vault.getVaultId().toString(10)+" btcTx: ", tx);
             try {
                 const btcTx = await this.root.bitcoinRpc.getTransaction(tx.txId);
+                //If there was a re-org in the meantime, the getTransaction() call here can still return blockhash=null
+                // which then breaks the merkle tree computation (obviously), hence the check
+                if(btcTx.confirmations<vault.getConfirmations()) {
+                    logger.warn(`tryGetClaimTxs(): Transaction doesn't have enough confirmations, txId: ${btcTx.txid}, confirmations: ${btcTx.confirmations}, target: ${vault.getConfirmations()}`);
+                    break;
+                }
                 const parsedTx = await this.spvVaultContract.getWithdrawalData(btcTx);
                 const newArr = [...withdrawals, parsedTx];
                 vault.calculateStateAfter(newArr);
