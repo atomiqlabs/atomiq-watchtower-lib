@@ -29,12 +29,15 @@ class PrunedTxMap {
             try {
                 const result = yield fs.readFile(this.filename);
                 const height = parseInt(result.toString());
-                btcRelayHeight = height;
+                if (height != null && !isNaN(height))
+                    btcRelayHeight = height;
             }
             catch (e) { }
             this.tipHeight = btcRelayHeight;
             //Build up the index for the last synced blockheight
             for (let i = 0; i < this.pruningFactor; i++) {
+                if (btcRelayHeight - i < 0)
+                    break;
                 const blockHash = yield this.bitcoinRpc.getBlockhash(btcRelayHeight - i);
                 const { block } = yield this.addBlock(blockHash, null, null, null, true);
             }
