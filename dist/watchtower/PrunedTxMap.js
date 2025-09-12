@@ -29,7 +29,8 @@ class PrunedTxMap {
             try {
                 const result = yield fs.readFile(this.filename);
                 const height = parseInt(result.toString());
-                btcRelayHeight = height;
+                if (height != null && !isNaN(height))
+                    btcRelayHeight = height;
             }
             catch (e) { }
             this.tipHeight = btcRelayHeight;
