@@ -53,7 +53,7 @@ class HashlockSavedWatchtower {
                     this.claimsInProcess[escrowHash] = this.claim(swapData, witness).then(() => {
                         delete this.claimsInProcess[escrowHash];
                         logger.debug("chainsEventListener: Removing swap escrowHash: " + escrowHash + " due to claim being successful!");
-                        this.remove(swapData);
+                        this.remove(escrowHash);
                     }, (e) => {
                         logger.error("chainsEventListener: Error when claiming swap escrowHash: " + escrowHash, e);
                         delete this.claimsInProcess[escrowHash];
@@ -155,6 +155,8 @@ class HashlockSavedWatchtower {
                 logger.info("messageListener: Attempting to claim escrowHash: " + escrowHash + " with secret: " + msg.witness + "!");
                 this.claimsInProcess[escrowHash] = this.claim(msg.swapData, msg.witness).then(() => {
                     delete this.claimsInProcess[escrowHash];
+                    logger.debug("messageListener: Removing swap escrowHash: " + escrowHash + " due to claim being successful!");
+                    this.remove(escrowHash);
                 }, (e) => {
                     logger.error("messageListener: Error when claiming swap escrowHash: " + escrowHash);
                     delete this.claimsInProcess[escrowHash];
