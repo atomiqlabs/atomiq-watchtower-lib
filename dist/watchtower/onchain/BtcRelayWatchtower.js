@@ -61,8 +61,17 @@ class BtcRelayWatchtower {
             return Object.assign(Object.assign({}, escrowClaimTxs), spvVaultClaimTxs);
         });
     }
-    markEscrowClaimReverted(escrowHash) {
-        return this.EscrowSwaps.markEscrowClaimReverted(escrowHash);
+    markClaimReverted(escrowHash) {
+        return __awaiter(this, void 0, void 0, function* () {
+            let success = false;
+            if (this.EscrowSwaps != null) {
+                const _success = yield this.EscrowSwaps.markEscrowClaimReverted(escrowHash);
+                success || (success = _success);
+            }
+            //TODO: We can also mark it as reverted for spv vault swaps, it should be safe to use escrowHash/btcTxId
+            // interchangeably, since the risk of collision is near 0 (as both are hashes)
+            return success;
+        });
     }
 }
 exports.BtcRelayWatchtower = BtcRelayWatchtower;

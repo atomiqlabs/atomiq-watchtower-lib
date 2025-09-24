@@ -115,8 +115,15 @@ export class BtcRelayWatchtower<T extends ChainType, B extends BtcStoredHeader<a
         }
     }
 
-    markEscrowClaimReverted(escrowHash: string): Promise<boolean> {
-        return this.EscrowSwaps.markEscrowClaimReverted(escrowHash);
+    async markClaimReverted(escrowHash: string): Promise<boolean> {
+        let success = false;
+        if(this.EscrowSwaps!=null) {
+            const _success = await this.EscrowSwaps.markEscrowClaimReverted(escrowHash);
+            success ||= _success;
+        }
+        //TODO: We can also mark it as reverted for spv vault swaps, it should be safe to use escrowHash/btcTxId
+        // interchangeably, since the risk of collision is near 0 (as both are hashes)
+        return success;
     }
 
 }
