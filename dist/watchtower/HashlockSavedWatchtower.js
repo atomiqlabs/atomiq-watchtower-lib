@@ -105,6 +105,11 @@ class HashlockSavedWatchtower {
         if (savedSwap.claimAttemptFailed)
             return;
         const escrowHash = savedSwap.swapData.getEscrowHash();
+        const unlock = savedSwap.lock(120);
+        if (unlock == null) {
+            logger.debug("attemptClaim(): Skipping escrowHash: " + escrowHash + " due to being locked!");
+            return;
+        }
         if (this.claimsInProcess[escrowHash] != null) {
             logger.debug("attemptClaim(): Skipping escrowHash: " + escrowHash + " due to already being processed!");
             return;
@@ -119,7 +124,8 @@ class HashlockSavedWatchtower {
             if (e instanceof base_1.TransactionRevertedError) {
                 logger.error(`attemptClaim(): Claim attempt failed due to transaction revertion, will not retry for ${escrowHash}!`);
                 savedSwap.claimAttemptFailed = true;
-                this.save(savedSwap);
+                if (this.escrowHashMap.has(escrowHash))
+                    this.save(savedSwap); //Might've been removed in the meantime
             }
             delete this.claimsInProcess[escrowHash];
         });

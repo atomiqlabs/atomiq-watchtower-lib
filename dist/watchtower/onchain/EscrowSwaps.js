@@ -194,7 +194,8 @@ class EscrowSwaps {
                     if (e instanceof base_1.TransactionRevertedError) {
                         logger.error(`claim(): Marking claim attempt failed (tx reverted) for swap with txoHash: ${txoHash}!`, e);
                         swap.claimAttemptFailed = true;
-                        yield this.save(swap);
+                        if (this.escrowHashMap.has(swap.swapData.getEscrowHash()))
+                            yield this.save(swap);
                         return false;
                     }
                     return false;

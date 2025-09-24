@@ -122,6 +122,12 @@ export class HashlockSavedWatchtower<T extends ChainType> {
 
         const escrowHash = savedSwap.swapData.getEscrowHash();
 
+        const unlock = savedSwap.lock(120);
+        if(unlock==null) {
+            logger.debug("attemptClaim(): Skipping escrowHash: "+escrowHash+" due to being locked!");
+            return;
+        }
+
         if(this.claimsInProcess[escrowHash]!=null) {
             logger.debug("attemptClaim(): Skipping escrowHash: "+escrowHash+" due to already being processed!");
             return;
@@ -137,7 +143,7 @@ export class HashlockSavedWatchtower<T extends ChainType> {
             if(e instanceof TransactionRevertedError) {
                 logger.error(`attemptClaim(): Claim attempt failed due to transaction revertion, will not retry for ${escrowHash}!`);
                 savedSwap.claimAttemptFailed = true;
-                this.save(savedSwap);
+                if(this.escrowHashMap.has(escrowHash)) this.save(savedSwap); //Might've been removed in the meantime
             }
             delete this.claimsInProcess[escrowHash];
         });

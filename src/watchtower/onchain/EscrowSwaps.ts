@@ -226,7 +226,7 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
                 if(e instanceof TransactionRevertedError) {
                     logger.error(`claim(): Marking claim attempt failed (tx reverted) for swap with txoHash: ${txoHash}!`, e);
                     swap.claimAttemptFailed = true;
-                    await this.save(swap);
+                    if(this.escrowHashMap.has(swap.swapData.getEscrowHash())) await this.save(swap);
                     return false;
                 }
                 return false;
