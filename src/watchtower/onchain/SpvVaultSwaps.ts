@@ -1,12 +1,10 @@
-import {SavedSwap} from "../SavedSwap";
 import {
     BtcStoredHeader,
     ChainEvent,
-    ChainSwapType,
     ChainType,
-    IStorageManager, SpvVaultClaimEvent, SpvVaultCloseEvent, SpvVaultData,
+    IStorageManager, SpvVaultClaimEvent, SpvVaultCloseEvent,
     SpvVaultEvent,
-    SpvVaultEventType, SpvVaultOpenEvent
+    SpvVaultOpenEvent
 } from "@atomiqlabs/base";
 import {BtcRelayWatchtower, WatchtowerClaimTxType} from "./BtcRelayWatchtower";
 import {getLogger} from "../../utils/Utils";

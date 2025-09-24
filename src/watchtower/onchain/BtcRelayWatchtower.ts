@@ -115,4 +115,8 @@ export class BtcRelayWatchtower<T extends ChainType, B extends BtcStoredHeader<a
         }
     }
 
+    markEscrowClaimReverted(escrowHash: string): Promise<boolean> {
+        return this.EscrowSwaps.markEscrowClaimReverted(escrowHash);
+    }
+
 }

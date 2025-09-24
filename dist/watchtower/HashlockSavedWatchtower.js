@@ -40,30 +40,21 @@ class HashlockSavedWatchtower {
                     if (swapData.hasSuccessAction())
                         continue;
                     const savedSwap = SavedSwap_1.SavedSwap.fromSwapData(swapData);
+                    const escrowHash = swapData.getEscrowHash();
+                    if (this.storage.data[escrowHash] != null) {
+                        logger.info(`chainsEventListener: Skipped adding new swap to watchlist, already there! escrowHash: ${escrowHash}`);
+                        continue;
+                    }
                     logger.info("chainsEventListener: Adding new swap to watchlist: ", savedSwap);
                     yield this.save(savedSwap);
-                    const escrowHash = swapData.getEscrowHash();
                     const witness = this.secretsMap.get(escrowHash);
                     if (witness == null)
                         continue;
-                    if (this.claimsInProcess[escrowHash] != null) {
-                        logger.debug("chainsEventListener: Skipping escrowHash: " + escrowHash + " due to already being processed!");
-                        continue;
-                    }
-                    this.claimsInProcess[escrowHash] = this.claim(swapData, witness).then(() => {
-                        delete this.claimsInProcess[escrowHash];
-                        logger.debug("chainsEventListener: Removing swap escrowHash: " + escrowHash + " due to claim being successful!");
-                        this.remove(escrowHash);
-                    }, (e) => {
-                        logger.error("chainsEventListener: Error when claiming swap escrowHash: " + escrowHash, e);
-                        delete this.claimsInProcess[escrowHash];
-                    });
+                    this.attemptClaim(savedSwap, witness);
                 }
                 else {
-                    const success = yield this.remove(event.escrowHash);
-                    if (success) {
-                        logger.info("chainsEventListener: Removed swap from watchlist: ", event.escrowHash);
-                    }
+                    yield this.remove(event.escrowHash);
+                    logger.info("chainsEventListener: Removed swap from watchlist: ", event.escrowHash);
                 }
             }
             return true;
@@ -87,10 +78,8 @@ class HashlockSavedWatchtower {
     }
     remove(escrowHash) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (!this.escrowHashMap.delete(escrowHash))
-                return false;
+            this.escrowHashMap.delete(escrowHash);
             yield this.storage.removeData(escrowHash);
-            return true;
         });
     }
     claim(swapData, witness) {
@@ -110,6 +99,29 @@ class HashlockSavedWatchtower {
                 yield this.swapContract.claimWithSecret(this.signer, swapData, witness, false, undefined, { waitForConfirmation: true });
             }
             logger.info("claim(): Claimed successfully escrowHash: " + swapData.getEscrowHash() + " with witness: " + witness + "!");
+        });
+    }
+    attemptClaim(savedSwap, witness) {
+        if (savedSwap.claimAttemptFailed)
+            return;
+        const escrowHash = savedSwap.swapData.getEscrowHash();
+        if (this.claimsInProcess[escrowHash] != null) {
+            logger.debug("attemptClaim(): Skipping escrowHash: " + escrowHash + " due to already being processed!");
+            return;
+        }
+        logger.info("attemptClaim(): Attempting to claim escrowHash: " + escrowHash + " with secret: " + witness + "!");
+        this.claimsInProcess[escrowHash] = this.claim(savedSwap.swapData, witness).then(() => {
+            delete this.claimsInProcess[escrowHash];
+            logger.debug("attemptClaim(): Removing swap escrowHash: " + escrowHash + " due to claim being successful!");
+            this.remove(escrowHash);
+        }, (e) => {
+            logger.error("attemptClaim(): Error when claiming swap escrowHash: " + escrowHash, e);
+            if (e instanceof base_1.TransactionRevertedError) {
+                logger.error(`attemptClaim(): Claim attempt failed due to transaction revertion, will not retry for ${escrowHash}!`);
+                savedSwap.claimAttemptFailed = true;
+                this.save(savedSwap);
+            }
+            delete this.claimsInProcess[escrowHash];
         });
     }
     init() {
@@ -144,23 +156,12 @@ class HashlockSavedWatchtower {
                 const escrowHash = msg.swapData.getEscrowHash();
                 if (this.secretsMap.set(escrowHash, msg.witness))
                     logger.debug("messageListener: Added new known secret: " + msg.witness + " escrowHash: " + escrowHash);
-                if (!this.escrowHashMap.has(escrowHash)) {
+                const savedSwap = this.escrowHashMap.get(escrowHash);
+                if (savedSwap == null) {
                     logger.debug("messageListener: Skipping escrowHash: " + escrowHash + " due to swap not being initiated!");
                     return;
                 }
-                if (this.claimsInProcess[escrowHash] != null) {
-                    logger.debug("messageListener: Skipping escrowHash: " + escrowHash + " due to already being processed!");
-                    return;
-                }
-                logger.info("messageListener: Attempting to claim escrowHash: " + escrowHash + " with secret: " + msg.witness + "!");
-                this.claimsInProcess[escrowHash] = this.claim(msg.swapData, msg.witness).then(() => {
-                    delete this.claimsInProcess[escrowHash];
-                    logger.debug("messageListener: Removing swap escrowHash: " + escrowHash + " due to claim being successful!");
-                    this.remove(escrowHash);
-                }, (e) => {
-                    logger.error("messageListener: Error when claiming swap escrowHash: " + escrowHash);
-                    delete this.claimsInProcess[escrowHash];
-                });
+                this.attemptClaim(savedSwap, msg.witness);
             });
             logger.info("subscribeToMessages(): Subscribed to messages!");
         });

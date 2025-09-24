@@ -37,6 +37,11 @@ class EscrowSwaps {
                         logger.warn("chainsEventListener: Skipping escrow " + swapData.getEscrowHash() + " due to missing txoHash & confirmations hint");
                         continue;
                     }
+                    const escrowHash = swapData.getEscrowHash();
+                    if (this.storage.data[escrowHash] != null) {
+                        logger.info(`chainsEventListener: Skipped adding new swap to watchlist, already there! escrowHash: ${escrowHash}`);
+                        continue;
+                    }
                     const txoHash = Buffer.from(swapData.getTxoHashHint(), "hex");
                     const txoHashHex = txoHash.toString("hex");
                     const savedSwap = new SavedSwap_1.SavedSwap(txoHash, swapData);
@@ -75,37 +80,47 @@ class EscrowSwaps {
             yield this.storage.init();
             const loadedData = yield this.storage.loadData(SavedSwap_1.SavedSwap);
             loadedData.forEach(swap => {
-                this.txoHashMap.set(swap.txoHash.toString("hex"), swap);
+                const txoHash = swap.txoHash.toString("hex");
+                let arr = this.txoHashMap.get(txoHash);
+                if (arr == null)
+                    this.txoHashMap.set(txoHash, arr = []);
+                arr.push(swap);
                 this.escrowHashMap.set(swap.swapData.getEscrowHash(), swap);
             });
         });
     }
     save(swap) {
         return __awaiter(this, void 0, void 0, function* () {
-            this.txoHashMap.set(swap.txoHash.toString("hex"), swap);
-            this.escrowHashMap.set(swap.swapData.getEscrowHash(), swap);
-            yield this.storage.saveData(swap.txoHash.toString("hex"), swap);
+            const txoHash = swap.txoHash.toString("hex");
+            const escrowHash = swap.swapData.getEscrowHash();
+            let arr = this.txoHashMap.get(txoHash);
+            if (arr == null)
+                this.txoHashMap.set(txoHash, arr = []);
+            if (!arr.includes(swap))
+                arr.push(swap);
+            this.escrowHashMap.set(escrowHash, swap);
+            yield this.storage.saveData(escrowHash, swap);
         });
     }
-    remove(txoHash) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const swap = this.txoHashMap.get(txoHash.toString("hex"));
-            if (swap == null)
-                return false;
-            this.txoHashMap.delete(swap.txoHash.toString("hex"));
-            this.escrowHashMap.delete(swap.swapData.getEscrowHash());
-            yield this.storage.removeData(swap.txoHash.toString("hex"));
-            return true;
-        });
+    remove(savedSwap) {
+        return this.removeByEscrowHash(savedSwap.swapData.getEscrowHash());
     }
     removeByEscrowHash(escrowHash) {
         return __awaiter(this, void 0, void 0, function* () {
             const swap = this.escrowHashMap.get(escrowHash);
             if (swap == null)
                 return false;
-            this.txoHashMap.delete(swap.txoHash.toString("hex"));
-            this.escrowHashMap.delete(swap.swapData.getEscrowHash());
-            yield this.storage.removeData(swap.txoHash.toString("hex"));
+            const txoHash = swap.txoHash.toString("hex");
+            const arr = this.txoHashMap.get(txoHash);
+            if (arr != null) {
+                const index = arr.indexOf(swap);
+                if (index !== -1)
+                    arr.splice(index, 1);
+                if (arr.length === 0)
+                    this.txoHashMap.delete(txoHash);
+            }
+            this.escrowHashMap.delete(escrowHash);
+            yield this.storage.removeData(escrowHash);
             return true;
         });
     }
@@ -173,13 +188,19 @@ class EscrowSwaps {
                 }
                 catch (e) {
                     if (e instanceof base_1.SwapDataVerificationError) {
-                        yield this.remove(swap.txoHash);
+                        yield this.remove(swap);
+                        return false;
+                    }
+                    if (e instanceof base_1.TransactionRevertedError) {
+                        logger.error(`claim(): Marking claim attempt failed (tx reverted) for swap with txoHash: ${txoHash}!`, e);
+                        swap.claimAttemptFailed = true;
+                        yield this.save(swap);
                         return false;
                     }
                     return false;
                 }
                 logger.info("claim(): Claim swap: " + swap.swapData.getEscrowHash() + " success!");
-                yield this.remove(txoHash);
+                yield this.remove(swap);
                 unlock();
                 return true;
             }
@@ -191,60 +212,76 @@ class EscrowSwaps {
     }
     tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap) {
         return __awaiter(this, void 0, void 0, function* () {
-            const savedSwap = this.txoHashMap.get(txoHash);
-            const requiredBlockHeight = data.height + savedSwap.swapData.getConfirmationsHint() - 1;
-            if (requiredBlockHeight <= tipHeight) {
-                logger.debug("tryGetClaimTxs(): Getting claim txs for txoHash: " + txoHash + " txId: " + data.txId + " vout: " + data.vout);
-                //Claimable
-                try {
-                    const unlock = savedSwap.lock(120);
-                    if (unlock == null)
-                        return;
-                    //Check claimer's bounty and create ATA if the claimer bounty covers the costs of it!
-                    let claimTxs;
-                    if (this.shouldClaimCbk != null) {
-                        const feeData = yield this.shouldClaimCbk(savedSwap);
-                        if (feeData == null) {
-                            logger.debug("tryGetClaimTxs(): Not claiming swap with txoHash: " + txoHash + " due to negative response from shouldClaimCbk() callback!");
-                            return;
-                        }
-                        logger.debug("tryGetClaimTxs(): Claiming swap with txoHash: " + txoHash + " initAta: " + feeData.initAta + " feeRate: " + feeData.feeRate);
-                        claimTxs = yield this.createClaimTxs(Buffer.from(txoHash, "hex"), savedSwap, data.txId, data.vout, data.height, computedHeaderMap, feeData.initAta, feeData.feeRate);
-                    }
-                    else {
-                        logger.debug("tryGetClaimTxs(): Claiming swap with txoHash: " + txoHash);
-                        claimTxs = yield this.createClaimTxs(Buffer.from(txoHash, "hex"), savedSwap, data.txId, data.vout, data.height, computedHeaderMap);
-                    }
-                    if (claimTxs == null) {
-                        yield this.remove(savedSwap.txoHash);
-                    }
-                    else {
-                        return {
-                            getTxs: (height, checkClaimable) => __awaiter(this, void 0, void 0, function* () {
-                                if (height != null && height < requiredBlockHeight)
-                                    return null;
-                                if (checkClaimable && !(yield this.swapContract.isCommited(savedSwap.swapData)))
-                                    return null;
-                                return claimTxs;
-                            }),
-                            data: {
-                                vout: data.vout,
-                                swapData: savedSwap.swapData,
-                                txId: data.txId,
-                                blockheight: data.height,
-                                maturedAt: requiredBlockHeight,
+            const savedSwaps = this.txoHashMap.get(txoHash);
+            const result = [];
+            for (let savedSwap of savedSwaps) {
+                if (savedSwap.claimAttemptFailed)
+                    continue;
+                const requiredBlockHeight = data.height + savedSwap.swapData.getConfirmationsHint() - 1;
+                if (requiredBlockHeight <= tipHeight) {
+                    logger.debug("tryGetClaimTxs(): Getting claim txs for txoHash: " + txoHash + " txId: " + data.txId + " vout: " + data.vout);
+                    //Claimable
+                    try {
+                        const unlock = savedSwap.lock(120);
+                        if (unlock == null)
+                            continue;
+                        //Check claimer's bounty and create ATA if the claimer bounty covers the costs of it!
+                        let claimTxs;
+                        if (this.shouldClaimCbk != null) {
+                            const feeData = yield this.shouldClaimCbk(savedSwap);
+                            if (feeData == null) {
+                                logger.debug("tryGetClaimTxs(): Not claiming swap with txoHash: " + txoHash + " due to negative response from shouldClaimCbk() callback!");
+                                continue;
                             }
-                        };
+                            logger.debug("tryGetClaimTxs(): Claiming swap with txoHash: " + txoHash + " initAta: " + feeData.initAta + " feeRate: " + feeData.feeRate);
+                            claimTxs = yield this.createClaimTxs(Buffer.from(txoHash, "hex"), savedSwap, data.txId, data.vout, data.height, computedHeaderMap, feeData.initAta, feeData.feeRate);
+                        }
+                        else {
+                            logger.debug("tryGetClaimTxs(): Claiming swap with txoHash: " + txoHash);
+                            claimTxs = yield this.createClaimTxs(Buffer.from(txoHash, "hex"), savedSwap, data.txId, data.vout, data.height, computedHeaderMap);
+                        }
+                        if (claimTxs == null) {
+                            yield this.remove(savedSwap);
+                        }
+                        else {
+                            result.push({
+                                getTxs: (height, checkClaimable) => __awaiter(this, void 0, void 0, function* () {
+                                    if (height != null && height < requiredBlockHeight)
+                                        return null;
+                                    if (checkClaimable && !(yield this.swapContract.isCommited(savedSwap.swapData)))
+                                        return null;
+                                    return claimTxs;
+                                }),
+                                data: {
+                                    vout: data.vout,
+                                    swapData: savedSwap.swapData,
+                                    txId: data.txId,
+                                    blockheight: data.height,
+                                    maturedAt: requiredBlockHeight,
+                                }
+                            });
+                        }
+                    }
+                    catch (e) {
+                        logger.error("tryGetClaimTxs(): Error getting claim txs for txoHash: " + txoHash + " txId: " + data.txId + " vout: " + data.vout, e);
                     }
                 }
-                catch (e) {
-                    logger.error("tryGetClaimTxs(): Error getting claim txs for txoHash: " + txoHash + " txId: " + data.txId + " vout: " + data.vout, e);
+                else {
+                    logger.warn("tryGetClaimTxs(): Cannot get claim txns yet, txoHash: " + txoHash + " requiredBlockheight: " + requiredBlockHeight + " tipHeight: " + tipHeight);
+                    continue;
                 }
             }
-            else {
-                logger.warn("tryGetClaimTxs(): Cannot get claim txns yet, txoHash: " + txoHash + " requiredBlockheight: " + requiredBlockHeight + " tipHeight: " + txoHash);
-                return null;
-            }
+            return result;
+        });
+    }
+    markEscrowClaimReverted(escrowHash) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const savedSwap = this.escrowHashMap.get(escrowHash);
+            if (savedSwap == null)
+                return false;
+            savedSwap.claimAttemptFailed = true;
+            yield this.save(savedSwap);
+            return true;
         });
     }
     getClaimTxs(foundTxos, computedHeaderMap) {
@@ -258,22 +295,28 @@ class EscrowSwaps {
                 for (let entry of foundTxos.entries()) {
                     const txoHash = entry[0];
                     const data = entry[1];
-                    const claimTxData = yield this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
-                    if (claimTxData != null)
-                        txs[txoHash] = claimTxData;
+                    const claimTxDataArray = yield this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
+                    claimTxDataArray.forEach(value => {
+                        const data = value.data;
+                        const escrowHash = data.swapData.getEscrowHash();
+                        txs[escrowHash] = value;
+                    });
                 }
             }
             //Check all the txs, if they are already confirmed in these blocks
             logger.debug("getClaimTxs(): Checking all saved swaps...");
             for (let txoHash of this.txoHashMap.keys()) {
-                if (txs[txoHash] != null)
+                if (foundTxos != null && foundTxos.has(txoHash))
                     continue;
                 const data = this.root.prunedTxoMap.getTxoObject(txoHash);
                 if (data == null)
                     continue;
-                const claimTxData = yield this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
-                if (claimTxData != null)
-                    txs[txoHash] = claimTxData;
+                const claimTxDataArray = yield this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
+                claimTxDataArray.forEach(value => {
+                    const data = value.data;
+                    const escrowHash = data.swapData.getEscrowHash();
+                    txs[escrowHash] = value;
+                });
             }
             return txs;
         });

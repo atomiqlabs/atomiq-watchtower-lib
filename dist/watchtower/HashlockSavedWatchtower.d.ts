@@ -26,6 +26,7 @@ export declare class HashlockSavedWatchtower<T extends ChainType> {
     private save;
     private remove;
     claim(swapData: T["Data"], witness: string): Promise<void>;
+    attemptClaim(savedSwap: SavedSwap<T>, witness: string): void;
     readonly claimsInProcess: {
         [escrowHash: string]: Promise<void>;
     };

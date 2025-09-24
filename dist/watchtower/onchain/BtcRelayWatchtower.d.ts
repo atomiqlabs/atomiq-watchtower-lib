@@ -47,4 +47,5 @@ export declare class BtcRelayWatchtower<T extends ChainType, B extends BtcStored
     }): Promise<{
         [identifier: string]: WatchtowerClaimTxType<T>;
     }>;
+    markEscrowClaimReverted(escrowHash: string): Promise<boolean>;
 }

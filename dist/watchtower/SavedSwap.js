@@ -9,16 +9,19 @@ class SavedSwap extends Lockable_1.Lockable {
         if (swapData != null) {
             this.txoHash = txoHashOrObj;
             this.swapData = swapData;
+            this.claimAttemptFailed = false;
         }
         else {
             this.txoHash = txoHashOrObj.txoHash == null ? null : Buffer.from(txoHashOrObj.txoHash, "hex");
             this.swapData = base_1.SwapData.deserialize(txoHashOrObj.swapData);
+            this.claimAttemptFailed = txoHashOrObj.claimAttemptFailed;
         }
     }
     serialize() {
         return {
             txoHash: this.txoHash == null ? null : this.txoHash.toString("hex"),
-            swapData: this.swapData.serialize()
+            swapData: this.swapData.serialize(),
+            claimAttemptFailed: this.claimAttemptFailed
         };
     }
     static fromSwapData(swapData) {

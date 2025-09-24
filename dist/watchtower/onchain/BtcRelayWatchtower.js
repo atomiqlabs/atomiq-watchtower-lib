@@ -61,5 +61,8 @@ class BtcRelayWatchtower {
             return Object.assign(Object.assign({}, escrowClaimTxs), spvVaultClaimTxs);
         });
     }
+    markEscrowClaimReverted(escrowHash) {
+        return this.EscrowSwaps.markEscrowClaimReverted(escrowHash);
+    }
 }
 exports.BtcRelayWatchtower = BtcRelayWatchtower;
