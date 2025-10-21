@@ -11,7 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SpvVaultSwaps = void 0;
 const base_1 = require("@atomiqlabs/base");
-const Utils_1 = require("../utils/Utils");
+const Utils_1 = require("../../utils/Utils");
 const logger = (0, Utils_1.getLogger)("SpvVaultSwaps: ");
 class SpvVaultSwaps {
     constructor(root, storage, deserializer, spvVaultContract, shouldClaimCbk) {
@@ -21,6 +21,60 @@ class SpvVaultSwaps {
         this.deserializer = deserializer;
         this.spvVaultContract = spvVaultContract;
         this.shouldClaimCbk = shouldClaimCbk;
+        this.root.swapEvents.registerListener((obj) => __awaiter(this, void 0, void 0, function* () {
+            for (let event of obj) {
+                if (!(event instanceof base_1.SpvVaultEvent))
+                    continue;
+                const identifier = this.getIdentifier(event.owner, event.vaultId);
+                const existingVault = this.storage.data[identifier];
+                let save = false;
+                if (event instanceof base_1.SpvVaultOpenEvent) {
+                    //Add vault to the list of tracked vaults
+                    if (existingVault != null) {
+                        existingVault.updateState(event);
+                        logger.warn("SC Event listener: Vault open event detected, but vault already saved, id: " + identifier);
+                        save = true;
+                    }
+                    else {
+                        logger.debug("SC Event listener: Open event detected, adding new vault id: " + identifier);
+                        const vaultData = yield this.spvVaultContract.getVaultData(event.owner, BigInt(event.vaultId));
+                        if (vaultData != null)
+                            yield this.save(vaultData);
+                    }
+                }
+                else if (event instanceof base_1.SpvVaultClaimEvent) {
+                    //Advance the state of the vault
+                    if (existingVault != null) {
+                        const previousUtxo = existingVault.getUtxo();
+                        existingVault.updateState(event);
+                        if (previousUtxo !== existingVault.getUtxo()) {
+                            logger.debug("SC Event listener: Claim event processed, removing prior utxo: " + previousUtxo + " id: " + identifier);
+                            this.txinMap.delete(previousUtxo);
+                        }
+                        save = true;
+                    }
+                    else {
+                        logger.warn("SC Event listener: Vault claim event detected, but vault not found, adding now, id: " + identifier);
+                    }
+                }
+                else if (event instanceof base_1.SpvVaultCloseEvent) {
+                    //Remove vault
+                    const identifier = this.getIdentifier(event.owner, event.vaultId);
+                    const existingVault = this.storage.data[identifier];
+                    if (existingVault != null) {
+                        logger.debug("SC Event listener: Vault close detected, removing id: " + identifier);
+                        yield this.remove(event.owner, event.vaultId);
+                    }
+                    else {
+                        logger.warn("SC Event listener: Vault close event detected, but vault already removed, id: " + identifier);
+                    }
+                }
+                if (save) {
+                    yield this.save(existingVault);
+                }
+            }
+            return true;
+        }));
     }
     init() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -35,60 +89,6 @@ class SpvVaultSwaps {
                 }
                 logger.info("init(): Vaults saved!");
             }
-            this.root.swapEvents.registerListener((obj) => __awaiter(this, void 0, void 0, function* () {
-                for (let event of obj) {
-                    if (!(event instanceof base_1.SpvVaultEvent))
-                        continue;
-                    const identifier = this.getIdentifier(event.owner, event.vaultId);
-                    const existingVault = this.storage.data[identifier];
-                    let save = false;
-                    if (event instanceof base_1.SpvVaultOpenEvent) {
-                        //Add vault to the list of tracked vaults
-                        if (existingVault != null) {
-                            existingVault.updateState(event);
-                            logger.warn("SC Event listener: Vault open event detected, but vault already saved, id: " + identifier);
-                            save = true;
-                        }
-                        else {
-                            logger.debug("SC Event listener: Open event detected, adding new vault id: " + identifier);
-                            const vaultData = yield this.spvVaultContract.getVaultData(event.owner, BigInt(event.vaultId));
-                            if (vaultData != null)
-                                yield this.save(vaultData);
-                        }
-                    }
-                    else if (event instanceof base_1.SpvVaultClaimEvent) {
-                        //Advance the state of the vault
-                        if (existingVault != null) {
-                            const previousUtxo = existingVault.getUtxo();
-                            existingVault.updateState(event);
-                            if (previousUtxo !== existingVault.getUtxo()) {
-                                logger.debug("SC Event listener: Claim event processed, removing prior utxo: " + previousUtxo + " id: " + identifier);
-                                this.txinMap.delete(previousUtxo);
-                            }
-                            save = true;
-                        }
-                        else {
-                            logger.warn("SC Event listener: Vault claim event detected, but vault not found, adding now, id: " + identifier);
-                        }
-                    }
-                    else if (event instanceof base_1.SpvVaultCloseEvent) {
-                        //Remove vault
-                        const identifier = this.getIdentifier(event.owner, event.vaultId);
-                        const existingVault = this.storage.data[identifier];
-                        if (existingVault != null) {
-                            logger.debug("SC Event listener: Vault close detected, removing id: " + identifier);
-                            yield this.remove(event.owner, event.vaultId);
-                        }
-                        else {
-                            logger.warn("SC Event listener: Vault close event detected, but vault already removed, id: " + identifier);
-                        }
-                    }
-                    if (save) {
-                        yield this.save(existingVault);
-                    }
-                }
-                return true;
-            }));
         });
     }
     load() {
@@ -137,6 +137,12 @@ class SpvVaultSwaps {
                 logger.debug("tryGetClaimTxs(): Adding new tx to withdrawals, owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " btcTx: ", tx);
                 try {
                     const btcTx = yield this.root.bitcoinRpc.getTransaction(tx.txId);
+                    //If there was a re-org in the meantime, the getTransaction() call here can still return blockhash=null
+                    // which then breaks the merkle tree computation (obviously), hence the check
+                    if (btcTx.confirmations < vault.getConfirmations()) {
+                        logger.warn(`tryGetClaimTxs(): Transaction doesn't have enough confirmations, txId: ${btcTx.txid}, confirmations: ${btcTx.confirmations}, target: ${vault.getConfirmations()}`);
+                        break;
+                    }
                     const parsedTx = yield this.spvVaultContract.getWithdrawalData(btcTx);
                     const newArr = [...withdrawals, parsedTx];
                     vault.calculateStateAfter(newArr);

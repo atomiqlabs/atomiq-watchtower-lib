@@ -1,5 +1,5 @@
 import { PrunedTxMap } from "./PrunedTxMap";
-import { SavedSwap } from "./SavedSwap";
+import { SavedSwap } from "../SavedSwap";
 import { BtcStoredHeader, BitcoinRpc, ChainType, IStorageManager } from "@atomiqlabs/base";
 import { EscrowSwaps } from "./EscrowSwaps";
 import { SpvVaultSwaps } from "./SpvVaultSwaps";
@@ -23,7 +23,7 @@ export type WatchtowerClaimTxType<T extends ChainType> = {
     getTxs: (height?: number, checkClaimable?: boolean) => Promise<T["TX"][] | null>;
     data: WatchtowerEscrowClaimData<T> | WatchtowerSpvVaultClaimData<T>;
 };
-export declare class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
+export declare class BtcRelayWatchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
     readonly btcRelay: T["BtcRelay"];
     readonly swapEvents: T["Events"];
     readonly signer: T["Signer"];
@@ -38,7 +38,8 @@ export declare class Watchtower<T extends ChainType, B extends BtcStoredHeader<a
         initAta: boolean;
         feeRate: any;
     }>);
-    init(): Promise<{
+    init(): Promise<void>;
+    initialSync(): Promise<{
         [identifier: string]: WatchtowerClaimTxType<T>;
     }>;
     syncToTipHash(newTipBlockHash: string, computedHeaderMap?: {
@@ -46,4 +47,5 @@ export declare class Watchtower<T extends ChainType, B extends BtcStoredHeader<a
     }): Promise<{
         [identifier: string]: WatchtowerClaimTxType<T>;
     }>;
+    markClaimReverted(escrowHash: string): Promise<boolean>;
 }

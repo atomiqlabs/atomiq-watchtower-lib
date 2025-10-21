@@ -1,17 +1,17 @@
-import { SavedSwap } from "./SavedSwap";
+import { SavedSwap } from "../SavedSwap";
 import { BtcStoredHeader, ChainType, IStorageManager } from "@atomiqlabs/base";
-import { Watchtower, WatchtowerClaimTxType } from "./Watchtower";
+import { BtcRelayWatchtower, WatchtowerClaimTxType } from "./BtcRelayWatchtower";
 export declare class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
-    readonly txoHashMap: Map<string, SavedSwap<T>>;
+    readonly txoHashMap: Map<string, SavedSwap<T>[]>;
     readonly escrowHashMap: Map<string, SavedSwap<T>>;
     readonly storage: IStorageManager<SavedSwap<T>>;
     readonly swapContract: T["Contract"];
-    readonly root: Watchtower<T, B>;
+    readonly root: BtcRelayWatchtower<T, B>;
     readonly shouldClaimCbk?: (swap: SavedSwap<T>) => Promise<{
         initAta: boolean;
         feeRate: any;
     }>;
-    constructor(root: Watchtower<T, B>, storage: IStorageManager<SavedSwap<T>>, swapContract: T["Contract"], shouldClaimCbk?: (swap: SavedSwap<T>) => Promise<{
+    constructor(root: BtcRelayWatchtower<T, B>, storage: IStorageManager<SavedSwap<T>>, swapContract: T["Contract"], shouldClaimCbk?: (swap: SavedSwap<T>) => Promise<{
         initAta: boolean;
         feeRate: any;
     }>);
@@ -23,6 +23,7 @@ export declare class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<
     private createClaimTxs;
     private claim;
     private tryGetClaimTxs;
+    markEscrowClaimReverted(escrowHash: string): Promise<boolean>;
     getClaimTxs(foundTxos?: Map<string, {
         txId: string;
         vout: number;
@@ -30,6 +31,6 @@ export declare class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<
     }>, computedHeaderMap?: {
         [blockheight: number]: B;
     }): Promise<{
-        [txcHash: string]: WatchtowerClaimTxType<T>;
+        [escrowHash: string]: WatchtowerClaimTxType<T>;
     }>;
 }

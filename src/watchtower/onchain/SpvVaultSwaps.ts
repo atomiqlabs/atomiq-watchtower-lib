@@ -1,15 +1,13 @@
-import {SavedSwap} from "./SavedSwap";
 import {
     BtcStoredHeader,
     ChainEvent,
-    ChainSwapType,
     ChainType,
-    IStorageManager, SpvVaultClaimEvent, SpvVaultCloseEvent, SpvVaultData,
+    IStorageManager, SpvVaultClaimEvent, SpvVaultCloseEvent,
     SpvVaultEvent,
-    SpvVaultEventType, SpvVaultOpenEvent
+    SpvVaultOpenEvent
 } from "@atomiqlabs/base";
-import {Watchtower, WatchtowerClaimTxType} from "./Watchtower";
-import {getLogger} from "../utils/Utils";
+import {BtcRelayWatchtower, WatchtowerClaimTxType} from "./BtcRelayWatchtower";
+import {getLogger} from "../../utils/Utils";
 
 const logger = getLogger("SpvVaultSwaps: ");
 
@@ -22,12 +20,12 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
 
     readonly spvVaultContract: T["SpvVaultContract"];
 
-    readonly root: Watchtower<T, B>;
+    readonly root: BtcRelayWatchtower<T, B>;
 
     readonly shouldClaimCbk?: (vault: T["SpvVaultData"], swapData: T["SpvVaultWithdrawalData"][]) => Promise<{initAta: boolean, feeRate: any}>;
 
     constructor(
-        root: Watchtower<T, B>,
+        root: BtcRelayWatchtower<T, B>,
         storage: IStorageManager<T["SpvVaultData"]>,
         deserializer: new (data: any) => T["SpvVaultData"],
         spvVaultContract: T["SpvVaultContract"],
@@ -38,21 +36,6 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
         this.deserializer = deserializer;
         this.spvVaultContract = spvVaultContract;
         this.shouldClaimCbk = shouldClaimCbk;
-    }
-
-    async init() {
-        const noVaults = await this.load();
-
-        //Load vaults from chain
-        if(noVaults) {
-            logger.info("init(): No vaults founds, syncing vaults from chain...");
-            const vaults = await this.spvVaultContract.getAllVaults();
-            logger.info("init(): Vaults synced!");
-            for(let vault of vaults) {
-                await this.save(vault);
-            }
-            logger.info("init(): Vaults saved!");
-        }
 
         this.root.swapEvents.registerListener(async (obj: ChainEvent<T["Data"]>[]) => {
             for(let event of obj) {
@@ -104,6 +87,21 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
 
             return true;
         });
+    }
+
+    async init() {
+        const noVaults = await this.load();
+
+        //Load vaults from chain
+        if(noVaults) {
+            logger.info("init(): No vaults founds, syncing vaults from chain...");
+            const vaults = await this.spvVaultContract.getAllVaults();
+            logger.info("init(): Vaults synced!");
+            for(let vault of vaults) {
+                await this.save(vault);
+            }
+            logger.info("init(): Vaults saved!");
+        }
     }
 
     private async load(): Promise<boolean> {
@@ -169,6 +167,12 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
             logger.debug("tryGetClaimTxs(): Adding new tx to withdrawals, owner: "+vault.getOwner()+" vaultId: "+vault.getVaultId().toString(10)+" btcTx: ", tx);
             try {
                 const btcTx = await this.root.bitcoinRpc.getTransaction(tx.txId);
+                //If there was a re-org in the meantime, the getTransaction() call here can still return blockhash=null
+                // which then breaks the merkle tree computation (obviously), hence the check
+                if(btcTx.confirmations<vault.getConfirmations()) {
+                    logger.warn(`tryGetClaimTxs(): Transaction doesn't have enough confirmations, txId: ${btcTx.txid}, confirmations: ${btcTx.confirmations}, target: ${vault.getConfirmations()}`);
+                    break;
+                }
                 const parsedTx = await this.spvVaultContract.getWithdrawalData(btcTx);
                 const newArr = [...withdrawals, parsedTx];
                 vault.calculateStateAfter(newArr);

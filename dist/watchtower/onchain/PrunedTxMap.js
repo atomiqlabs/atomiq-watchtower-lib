@@ -9,10 +9,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PrunedTxoMap = void 0;
+exports.PrunedTxMap = void 0;
 const crypto_1 = require("crypto");
 const fs = require("fs/promises");
-class PrunedTxoMap {
+const Utils_1 = require("../../utils/Utils");
+const logger = (0, Utils_1.getLogger)("PrunedTxMap: ");
+class PrunedTxMap {
     constructor(filename, bitcoinRpc, pruningFactor) {
         this.txoMap = new Map();
         this.txinMap = new Map();
@@ -27,21 +29,24 @@ class PrunedTxoMap {
             try {
                 const result = yield fs.readFile(this.filename);
                 const height = parseInt(result.toString());
-                btcRelayHeight = height;
+                if (height != null && !isNaN(height))
+                    btcRelayHeight = height;
             }
             catch (e) { }
             this.tipHeight = btcRelayHeight;
             //Build up the index for the last synced blockheight
             for (let i = 0; i < this.pruningFactor; i++) {
+                if (btcRelayHeight - i < 0)
+                    break;
                 const blockHash = yield this.bitcoinRpc.getBlockhash(btcRelayHeight - i);
-                const { block } = yield this.addBlock(blockHash, null, null, true);
+                const { block } = yield this.addBlock(blockHash, null, null, null, true);
             }
             return this.tipHeight;
         });
     }
     syncToTipHash(tipBlockHash, waitingForTxosMap, waitingForTxinMap) {
         return __awaiter(this, void 0, void 0, function* () {
-            console.log("[PrunedTxoMap]: Syncing to tip hash: ", tipBlockHash);
+            logger.info("syncToTipHash(): Syncing to tip hash: ", tipBlockHash);
             const blockHashes = [tipBlockHash];
             while (true) {
                 const btcBlockHeader = yield this.bitcoinRpc.getBlockHeader(blockHashes[blockHashes.length - 1]);
@@ -62,9 +67,23 @@ class PrunedTxoMap {
             }
             const totalFoundTxos = new Map();
             const totalFoundTxins = new Map();
-            console.log("[PrunedTxoMap]: Syncing through blockhashes: ", blockHashes);
+            //Add txos and txins from current maps
+            if (waitingForTxosMap != null)
+                waitingForTxosMap.forEach((_, key) => {
+                    const val = this.txoMap.get(key);
+                    if (val != null)
+                        totalFoundTxos.set(key, val);
+                });
+            if (waitingForTxinMap != null)
+                waitingForTxinMap.forEach((_, key) => {
+                    const val = this.txinMap.get(key);
+                    if (val != null)
+                        totalFoundTxins.set(key, val);
+                });
+            logger.debug("syncToTipHash(): Syncing through blockhashes: ", blockHashes);
+            const newlyCreatedUtxos = new Set();
             for (let i = blockHashes.length - 1; i >= 0; i--) {
-                const { foundTxos, foundTxins } = yield this.addBlock(blockHashes[i], waitingForTxosMap, waitingForTxinMap);
+                const { foundTxos, foundTxins } = yield this.addBlock(blockHashes[i], waitingForTxosMap, waitingForTxinMap, newlyCreatedUtxos);
                 foundTxos.forEach((value, key) => {
                     totalFoundTxos.set(key, value);
                 });
@@ -84,10 +103,11 @@ class PrunedTxoMap {
         buff.write(outputScript, 8, "hex");
         return (0, crypto_1.createHash)("sha256").update(buff).digest();
     }
-    addBlock(headerHash, waitingForTxosMap, waitingForTxinMap, noSaveTipHeight) {
+    addBlock(headerHash, waitingForTxosMap, waitingForTxinMap, newlyCreatedUtxos, noSaveTipHeight) {
         return __awaiter(this, void 0, void 0, function* () {
+            newlyCreatedUtxos !== null && newlyCreatedUtxos !== void 0 ? newlyCreatedUtxos : (newlyCreatedUtxos = new Set());
             const block = yield this.bitcoinRpc.getBlockWithTransactions(headerHash);
-            console.log("[PrunedTxoMap]: Adding block  " + block.height + ", hash: ", block.hash);
+            logger.info("addBlock(): Adding block  " + block.height + ", hash: ", block.hash);
             if (!noSaveTipHeight) {
                 this.tipHeight = block.height;
                 yield fs.writeFile(this.filename, this.tipHeight.toString());
@@ -97,7 +117,7 @@ class PrunedTxoMap {
             const blockTxoHashes = [];
             const blockTxins = [];
             if (this.blocksMap.has(block.height)) {
-                console.log("[PrunedTxoMap]: Fork block hash: ", block.hash);
+                logger.info("addBlock(): Fork block hash: ", block.hash);
                 //Forked off
                 for (let txoHash of this.blocksMap.get(block.height).txoHashes) {
                     this.txoMap.delete(txoHash.toString("hex"));
@@ -105,7 +125,7 @@ class PrunedTxoMap {
             }
             for (let tx of block.tx) {
                 for (let vout of tx.outs) {
-                    const txoHash = PrunedTxoMap.toTxoHash(vout.value, vout.scriptPubKey.hex);
+                    const txoHash = PrunedTxMap.toTxoHash(vout.value, vout.scriptPubKey.hex);
                     blockTxoHashes.push(txoHash);
                     const txObj = {
                         txId: tx.txid,
@@ -128,7 +148,22 @@ class PrunedTxoMap {
                     this.txinMap.set(spentUtxo, txObj);
                     if (waitingForTxinMap != null && waitingForTxinMap.has(spentUtxo)) {
                         foundTxins.set(spentUtxo, txObj);
+                        //We need to make sure we also check the newly created utxos here
+                        newlyCreatedUtxos.add(tx.txid + ":0");
                     }
+                }
+            }
+            for (let newlyCreatedUtxo of newlyCreatedUtxos.keys()) {
+                let newUtxoData = this.txinMap.get(newlyCreatedUtxo);
+                if (newUtxoData == null)
+                    continue;
+                newlyCreatedUtxos.delete(newlyCreatedUtxo);
+                while (newUtxoData != null) {
+                    //Save it
+                    foundTxins.set(newlyCreatedUtxo, newUtxoData);
+                    //Check next one
+                    newlyCreatedUtxo = newUtxoData.txId + ":0";
+                    newUtxoData = this.txinMap.get(newlyCreatedUtxo);
                 }
             }
             this.blocksMap.set(block.height, {
@@ -139,7 +174,7 @@ class PrunedTxoMap {
             //Pruned
             const pruneBlockheight = block.height - this.pruningFactor;
             if (this.blocksMap.has(pruneBlockheight)) {
-                console.log("[PrunedTxoMap]: Pruning block height: ", pruneBlockheight);
+                logger.debug("addBlock(): Pruning block height: ", pruneBlockheight);
                 const prunedBlock = this.blocksMap.get(pruneBlockheight);
                 for (let txoHash of prunedBlock.txoHashes) {
                     this.txoMap.delete(txoHash.toString("hex"));
@@ -163,4 +198,4 @@ class PrunedTxoMap {
         return this.txinMap.get(utxo);
     }
 }
-exports.PrunedTxoMap = PrunedTxoMap;
+exports.PrunedTxMap = PrunedTxMap;

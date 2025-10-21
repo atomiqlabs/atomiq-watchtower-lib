@@ -1,5 +1,5 @@
 import {PrunedTxMap} from "./PrunedTxMap";
-import {SavedSwap} from "./SavedSwap";
+import {SavedSwap} from "../SavedSwap";
 import {
     BtcStoredHeader,
     BitcoinRpc,
@@ -7,7 +7,7 @@ import {
 } from "@atomiqlabs/base";
 import { EscrowSwaps } from "./EscrowSwaps";
 import { SpvVaultSwaps } from "./SpvVaultSwaps";
-import {getLogger} from "../utils/Utils";
+import {getLogger} from "../../utils/Utils";
 
 export type WatchtowerEscrowClaimData<T extends ChainType> = {
     txId: string,
@@ -34,7 +34,7 @@ export type WatchtowerClaimTxType<T extends ChainType> = {
 
 const logger = getLogger("Watchtower: ");
 
-export class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
+export class BtcRelayWatchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
 
     readonly btcRelay: T["BtcRelay"];
 
@@ -68,23 +68,19 @@ export class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
         this.signer = signer;
         this.bitcoinRpc = bitcoinRpc;
         this.prunedTxoMap = new PrunedTxMap(wtHeightStorageFile, bitcoinRpc, pruningFactor);
-        this.EscrowSwaps = new EscrowSwaps(this, storage, swapContract, escrowShouldClaimCbk);
+        if(swapContract!=null) this.EscrowSwaps = new EscrowSwaps(this, storage, swapContract, escrowShouldClaimCbk);
         if(spvVaultContract!=null) this.SpvVaultSwaps = new SpvVaultSwaps(this, vaultStorage, spvVaultDataDeserializer, spvVaultContract, vaultShouldClaimCbk)
     }
 
-    async init(): Promise<{
+    async init(): Promise<void> {
+        if(this.EscrowSwaps!=null) await this.EscrowSwaps.init();
+        if(this.SpvVaultSwaps!=null) await this.SpvVaultSwaps.init();
+        logger.info("init(): Loaded!");
+    }
+
+    async initialSync(): Promise<{
         [identifier: string]: WatchtowerClaimTxType<T>
     }> {
-        await this.EscrowSwaps.init();
-        if(this.SpvVaultSwaps!=null) await this.SpvVaultSwaps.init();
-
-        logger.info("init(): Loaded!");
-
-        //Sync to latest on Solana
-        await this.swapEvents.init();
-
-        logger.info("init(): Synchronized smart chain events");
-
         const resp = await this.btcRelay.retrieveLatestKnownBlockLog();
 
         //Sync to previously processed block
@@ -92,7 +88,7 @@ export class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
         logger.info("init(): Synced to last processed block");
 
         //Sync watchtower to the btc relay height and get all the claim txs
-        return  await this.syncToTipHash(resp.resultBitcoinHeader.hash);
+        return await this.syncToTipHash(resp.resultBitcoinHeader.hash);
     }
 
     async syncToTipHash(
@@ -105,10 +101,10 @@ export class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
 
         //Check txoHashes that got required confirmations in these blocks,
         // but they might be already pruned if we only checked after
-        const {foundTxos, foundTxins} = await this.prunedTxoMap.syncToTipHash(newTipBlockHash, this.EscrowSwaps.txoHashMap, this.SpvVaultSwaps?.txinMap);
+        const {foundTxos, foundTxins} = await this.prunedTxoMap.syncToTipHash(newTipBlockHash, this.EscrowSwaps?.txoHashMap, this.SpvVaultSwaps?.txinMap);
         logger.debug("syncToTipHash(): Returned found txins: ", foundTxins);
 
-        const escrowClaimTxs = await this.EscrowSwaps.getClaimTxs(foundTxos, computedHeaderMap);
+        const escrowClaimTxs = this.EscrowSwaps==null ? {} : await this.EscrowSwaps.getClaimTxs(foundTxos, computedHeaderMap);
         const spvVaultClaimTxs = this.SpvVaultSwaps==null ? {} : await this.SpvVaultSwaps.getClaimTxs(foundTxins, computedHeaderMap);
         logger.debug("syncToTipHash(): Returned escrow claim txs: ", escrowClaimTxs);
         logger.debug("syncToTipHash(): Returned spv vault claim txs: ", spvVaultClaimTxs);
@@ -117,6 +113,17 @@ export class Watchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
             ...escrowClaimTxs,
             ...spvVaultClaimTxs
         }
+    }
+
+    async markClaimReverted(escrowHash: string): Promise<boolean> {
+        let success = false;
+        if(this.EscrowSwaps!=null) {
+            const _success = await this.EscrowSwaps.markEscrowClaimReverted(escrowHash);
+            success ||= _success;
+        }
+        //TODO: We can also mark it as reverted for spv vault swaps, it should be safe to use escrowHash/btcTxId
+        // interchangeably, since the risk of collision is near 0 (as both are hashes)
+        return success;
     }
 
 }

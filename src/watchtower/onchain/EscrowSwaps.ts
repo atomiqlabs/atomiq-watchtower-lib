@@ -1,4 +1,4 @@
-import {SavedSwap} from "./SavedSwap";
+import {SavedSwap} from "../SavedSwap";
 import {PrunedTxMap} from "./PrunedTxMap";
 import {
     BtcStoredHeader, ChainEvent, ChainSwapType,
@@ -6,28 +6,28 @@ import {
     InitializeEvent,
     IStorageManager,
     SwapDataVerificationError,
-    SwapEvent
+    SwapEvent, TransactionRevertedError
 } from "@atomiqlabs/base";
-import {Watchtower, WatchtowerClaimTxType} from "./Watchtower";
-import {getLogger} from "../utils/Utils";
+import {BtcRelayWatchtower, WatchtowerClaimTxType, WatchtowerEscrowClaimData} from "./BtcRelayWatchtower";
+import {getLogger} from "../../utils/Utils";
 
 const logger = getLogger("EscrowSwaps: ")
 
 export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
 
-    readonly txoHashMap: Map<string, SavedSwap<T>> = new Map<string, SavedSwap<T>>();
+    readonly txoHashMap: Map<string, SavedSwap<T>[]> = new Map<string, SavedSwap<T>[]>();
     readonly escrowHashMap: Map<string, SavedSwap<T>> = new Map<string, SavedSwap<T>>();
 
     readonly storage: IStorageManager<SavedSwap<T>>;
 
     readonly swapContract: T["Contract"];
 
-    readonly root: Watchtower<T, B>;
+    readonly root: BtcRelayWatchtower<T, B>;
 
     readonly shouldClaimCbk?: (swap: SavedSwap<T>) => Promise<{initAta: boolean, feeRate: any}>;
 
     constructor(
-        root: Watchtower<T, B>,
+        root: BtcRelayWatchtower<T, B>,
         storage: IStorageManager<SavedSwap<T>>,
         swapContract: T["Contract"],
         shouldClaimCbk?: (swap: SavedSwap<T>) => Promise<{initAta: boolean, feeRate: any}>
@@ -36,10 +36,6 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
         this.storage = storage;
         this.swapContract = swapContract;
         this.shouldClaimCbk = shouldClaimCbk;
-    }
-
-    async init() {
-        await this.load();
 
         this.root.swapEvents.registerListener(async (obj: ChainEvent<T["Data"]>[]) => {
             for(let event of obj) {
@@ -48,8 +44,15 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
                     if(event.swapType!==ChainSwapType.CHAIN) continue;
 
                     const swapData = await event.swapData();
+                    if(swapData.hasSuccessAction()) continue;
                     if(swapData.getTxoHashHint()==null || swapData.getConfirmationsHint()==null) {
                         logger.warn("chainsEventListener: Skipping escrow "+swapData.getEscrowHash()+" due to missing txoHash & confirmations hint");
+                        continue;
+                    }
+
+                    const escrowHash = swapData.getEscrowHash();
+                    if(this.storage.data[escrowHash]!=null) {
+                        logger.info(`chainsEventListener: Skipped adding new swap to watchlist, already there! escrowHash: ${escrowHash}`);
                         continue;
                     }
 
@@ -57,9 +60,7 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
                     const txoHashHex = txoHash.toString("hex");
 
                     const savedSwap: SavedSwap<T> = new SavedSwap<T>(txoHash, swapData);
-
                     logger.info("chainsEventListener: Adding new swap to watchlist: ", savedSwap);
-
                     await this.save(savedSwap);
 
                     //Check with pruned tx map
@@ -85,39 +86,49 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
         });
     }
 
+    async init() {
+        await this.load();
+    }
+
     private async load() {
         await this.storage.init();
         const loadedData = await this.storage.loadData(SavedSwap);
         loadedData.forEach(swap => {
-            this.txoHashMap.set(swap.txoHash.toString("hex"), swap);
+            const txoHash = swap.txoHash.toString("hex");
+            let arr = this.txoHashMap.get(txoHash);
+            if(arr==null) this.txoHashMap.set(txoHash, arr = []);
+            arr.push(swap);
             this.escrowHashMap.set(swap.swapData.getEscrowHash(), swap);
         });
     }
 
     private async save(swap: SavedSwap<T>) {
-        this.txoHashMap.set(swap.txoHash.toString("hex"), swap);
-        this.escrowHashMap.set(swap.swapData.getEscrowHash(), swap);
-        await this.storage.saveData(swap.txoHash.toString("hex"), swap);
+        const txoHash = swap.txoHash.toString("hex");
+        const escrowHash = swap.swapData.getEscrowHash();
+        let arr = this.txoHashMap.get(txoHash);
+        if(arr==null) this.txoHashMap.set(txoHash, arr = []);
+        if(!arr.includes(swap)) arr.push(swap);
+        this.escrowHashMap.set(escrowHash, swap);
+        await this.storage.saveData(escrowHash, swap);
     }
 
-    private async remove(txoHash: Buffer): Promise<boolean> {
-        const swap = this.txoHashMap.get(txoHash.toString("hex"));
-        if(swap==null) return false;
-
-        this.txoHashMap.delete(swap.txoHash.toString("hex"));
-        this.escrowHashMap.delete(swap.swapData.getEscrowHash());
-        await this.storage.removeData(swap.txoHash.toString("hex"));
-
-        return true;
+    private remove(savedSwap: SavedSwap<T>): Promise<boolean> {
+        return this.removeByEscrowHash(savedSwap.swapData.getEscrowHash());
     }
 
     private async removeByEscrowHash(escrowHash: string): Promise<boolean> {
         const swap = this.escrowHashMap.get(escrowHash);
         if(swap==null) return false;
 
-        this.txoHashMap.delete(swap.txoHash.toString("hex"));
-        this.escrowHashMap.delete(swap.swapData.getEscrowHash());
-        await this.storage.removeData(swap.txoHash.toString("hex"));
+        const txoHash = swap.txoHash.toString("hex");
+        const arr = this.txoHashMap.get(txoHash);
+        if(arr!=null) {
+            const index = arr.indexOf(swap);
+            if(index!==-1) arr.splice(index, 1);
+            if(arr.length===0) this.txoHashMap.delete(txoHash);
+        }
+        this.escrowHashMap.delete(escrowHash);
+        await this.storage.removeData(escrowHash);
 
         return true;
     }
@@ -209,7 +220,13 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
                 );
             } catch (e) {
                 if(e instanceof SwapDataVerificationError) {
-                    await this.remove(swap.txoHash);
+                    await this.remove(swap);
+                    return false;
+                }
+                if(e instanceof TransactionRevertedError) {
+                    logger.error(`claim(): Marking claim attempt failed (tx reverted) for swap with txoHash: ${txoHash}!`, e);
+                    swap.claimAttemptFailed = true;
+                    if(this.escrowHashMap.has(swap.swapData.getEscrowHash())) await this.save(swap);
                     return false;
                 }
                 return false;
@@ -217,7 +234,7 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
 
             logger.info("claim(): Claim swap: "+swap.swapData.getEscrowHash()+" success!");
 
-            await this.remove(txoHash);
+            await this.remove(swap);
 
             unlock();
 
@@ -234,75 +251,91 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
         data: {txId: string, vout: number, height: number},
         tipHeight: number,
         computedHeaderMap?: {[blockheight: number]: B}
-    ): Promise<WatchtowerClaimTxType<T>> {
-        const savedSwap = this.txoHashMap.get(txoHash);
-        const requiredBlockHeight = data.height+savedSwap.swapData.getConfirmationsHint()-1;
-        if(requiredBlockHeight<=tipHeight) {
-            logger.debug("tryGetClaimTxs(): Getting claim txs for txoHash: "+txoHash+" txId: "+data.txId+" vout: "+data.vout);
-            //Claimable
-            try {
-                const unlock = savedSwap.lock(120);
-                if(unlock==null) return;
+    ) {
+        const savedSwaps = this.txoHashMap.get(txoHash);
 
-                //Check claimer's bounty and create ATA if the claimer bounty covers the costs of it!
+        const result: WatchtowerClaimTxType<T>[] = [];
+        for(let savedSwap of savedSwaps) {
+            if(savedSwap.claimAttemptFailed) continue;
 
-                let claimTxs: T["TX"][];
-                if(this.shouldClaimCbk!=null) {
-                    const feeData = await this.shouldClaimCbk(savedSwap);
-                    if(feeData==null) {
-                        logger.debug("tryGetClaimTxs(): Not claiming swap with txoHash: "+txoHash+" due to negative response from shouldClaimCbk() callback!");
-                        return;
-                    }
-                    logger.debug("tryGetClaimTxs(): Claiming swap with txoHash: "+txoHash+" initAta: "+feeData.initAta+" feeRate: "+feeData.feeRate);
-                    claimTxs = await this.createClaimTxs(
-                        Buffer.from(txoHash, "hex"), savedSwap, data.txId, data.vout, data.height,
-                        computedHeaderMap, feeData.initAta, feeData.feeRate
-                    );
-                } else {
-                    logger.debug("tryGetClaimTxs(): Claiming swap with txoHash: "+txoHash);
-                    claimTxs = await this.createClaimTxs(
-                        Buffer.from(txoHash, "hex"), savedSwap, data.txId, data.vout, data.height,
-                        computedHeaderMap
-                    );
-                }
+            const requiredBlockHeight = data.height+savedSwap.swapData.getConfirmationsHint()-1;
+            if(requiredBlockHeight<=tipHeight) {
+                logger.debug("tryGetClaimTxs(): Getting claim txs for txoHash: "+txoHash+" txId: "+data.txId+" vout: "+data.vout);
+                //Claimable
+                try {
+                    const unlock = savedSwap.lock(120);
+                    if(unlock==null) continue;
 
-                if(claimTxs==null)  {
-                    await this.remove(savedSwap.txoHash);
-                } else {
-                    return {
-                        getTxs: async (height?: number, checkClaimable?: boolean) => {
-                            if(height!=null && height < requiredBlockHeight) return null;
-                            if(checkClaimable && !(await this.swapContract.isCommited(savedSwap.swapData))) return null;
-                            return claimTxs;
-                        },
-                        data: {
-                            vout: data.vout,
-                            swapData: savedSwap.swapData,
-                            txId: data.txId,
-                            blockheight: data.height,
-                            maturedAt: requiredBlockHeight,
+                    //Check claimer's bounty and create ATA if the claimer bounty covers the costs of it!
+
+                    let claimTxs: T["TX"][];
+                    if(this.shouldClaimCbk!=null) {
+                        const feeData = await this.shouldClaimCbk(savedSwap);
+                        if(feeData==null) {
+                            logger.debug("tryGetClaimTxs(): Not claiming swap with txoHash: "+txoHash+" due to negative response from shouldClaimCbk() callback!");
+                            continue;
                         }
+                        logger.debug("tryGetClaimTxs(): Claiming swap with txoHash: "+txoHash+" initAta: "+feeData.initAta+" feeRate: "+feeData.feeRate);
+                        claimTxs = await this.createClaimTxs(
+                            Buffer.from(txoHash, "hex"), savedSwap, data.txId, data.vout, data.height,
+                            computedHeaderMap, feeData.initAta, feeData.feeRate
+                        );
+                    } else {
+                        logger.debug("tryGetClaimTxs(): Claiming swap with txoHash: "+txoHash);
+                        claimTxs = await this.createClaimTxs(
+                            Buffer.from(txoHash, "hex"), savedSwap, data.txId, data.vout, data.height,
+                            computedHeaderMap
+                        );
                     }
+
+                    if(claimTxs==null)  {
+                        await this.remove(savedSwap);
+                    } else {
+                        result.push({
+                            getTxs: async (height?: number, checkClaimable?: boolean) => {
+                                if(height!=null && height < requiredBlockHeight) return null;
+                                if(checkClaimable && !(await this.swapContract.isCommited(savedSwap.swapData))) return null;
+                                return claimTxs;
+                            },
+                            data: {
+                                vout: data.vout,
+                                swapData: savedSwap.swapData,
+                                txId: data.txId,
+                                blockheight: data.height,
+                                maturedAt: requiredBlockHeight,
+                            }
+                        });
+                    }
+                } catch (e) {
+                    logger.error("tryGetClaimTxs(): Error getting claim txs for txoHash: "+txoHash+" txId: "+data.txId+" vout: "+data.vout, e);
                 }
-            } catch (e) {
-                logger.error("tryGetClaimTxs(): Error getting claim txs for txoHash: "+txoHash+" txId: "+data.txId+" vout: "+data.vout, e);
+            } else {
+                logger.warn("tryGetClaimTxs(): Cannot get claim txns yet, txoHash: "+txoHash+" requiredBlockheight: "+requiredBlockHeight+" tipHeight: "+tipHeight);
+                continue;
             }
-        } else {
-            logger.warn("tryGetClaimTxs(): Cannot get claim txns yet, txoHash: "+txoHash+" requiredBlockheight: "+requiredBlockHeight+" tipHeight: "+txoHash);
-            return null
         }
+
+        return result;
+    }
+
+    async markEscrowClaimReverted(escrowHash: string): Promise<boolean> {
+        const savedSwap = this.escrowHashMap.get(escrowHash);
+        if(savedSwap==null) return false;
+        savedSwap.claimAttemptFailed = true;
+        await this.save(savedSwap);
+        return true;
     }
 
     async getClaimTxs(
         foundTxos?: Map<string, {txId: string, vout: number, height: number}>,
         computedHeaderMap?: {[blockheight: number]: B}
     ): Promise<{
-        [txcHash: string]: WatchtowerClaimTxType<T>
+        [escrowHash: string]: WatchtowerClaimTxType<T>
     }> {
         const tipHeight = this.root.prunedTxoMap.tipHeight;
 
         const txs: {
-            [txcHash: string]: WatchtowerClaimTxType<T>
+            [escrowHash: string]: WatchtowerClaimTxType<T>
         } = {};
 
         //Check txoHashes that got required confirmations in the to-be-synchronized blocks,
@@ -312,19 +345,28 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
             for(let entry of foundTxos.entries()) {
                 const txoHash = entry[0];
                 const data = entry[1];
-                const claimTxData = await this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
-                if(claimTxData!=null) txs[txoHash] = claimTxData;
+                const claimTxDataArray = await this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
+                claimTxDataArray.forEach(value => {
+                    const data = value.data as WatchtowerEscrowClaimData<T>;
+                    const escrowHash = data.swapData.getEscrowHash();
+                    txs[escrowHash] = value;
+                });
             }
         }
 
         //Check all the txs, if they are already confirmed in these blocks
         logger.debug("getClaimTxs(): Checking all saved swaps...");
         for(let txoHash of this.txoHashMap.keys()) {
-            if(txs[txoHash]!=null) continue;
+            if(foundTxos!=null && foundTxos.has(txoHash)) continue;
             const data = this.root.prunedTxoMap.getTxoObject(txoHash);
             if(data==null) continue;
-            const claimTxData = await this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
-            if(claimTxData!=null) txs[txoHash] = claimTxData;
+
+            const claimTxDataArray = await this.tryGetClaimTxs(txoHash, data, tipHeight, computedHeaderMap);
+            claimTxDataArray.forEach(value => {
+                const data = value.data as WatchtowerEscrowClaimData<T>;
+                const escrowHash = data.swapData.getEscrowHash();
+                txs[escrowHash] = value;
+            });
         }
 
         return txs;
