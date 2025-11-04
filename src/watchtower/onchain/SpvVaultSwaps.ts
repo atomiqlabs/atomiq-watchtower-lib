@@ -2,7 +2,7 @@ import {
     BtcStoredHeader,
     ChainEvent,
     ChainType,
-    IStorageManager, SpvVaultClaimEvent, SpvVaultCloseEvent,
+    IStorageManager, SpvVaultClaimEvent, SpvVaultCloseEvent, SpvVaultDepositEvent,
     SpvVaultEvent,
     SpvVaultOpenEvent
 } from "@atomiqlabs/base";
@@ -41,7 +41,7 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
             for(let event of obj) {
                 if(!(event instanceof SpvVaultEvent)) continue;
                 const identifier = this.getIdentifier(event.owner, event.vaultId);
-                const existingVault = this.storage.data[identifier];
+                let existingVault = this.storage.data[identifier];
                 let save = false;
 
                 if(event instanceof SpvVaultOpenEvent) {
@@ -53,7 +53,14 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
                     } else {
                         logger.debug("SC Event listener: Open event detected, adding new vault id: "+identifier);
                         const vaultData = await this.spvVaultContract.getVaultData(event.owner, BigInt(event.vaultId));
-                        if(vaultData!=null) await this.save(vaultData);
+                        if(vaultData!=null) {
+                            //Try to also update with the event
+                            vaultData.updateState(event);
+                            existingVault = vaultData;
+                            save = true;
+                        } else {
+                            logger.warn("SC Event listener: Vault cannot be fetched: "+identifier);
+                        }
                     }
                 } else if(event instanceof SpvVaultClaimEvent) {
                     //Advance the state of the vault
@@ -67,17 +74,41 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
                         save = true;
                     } else {
                         logger.warn("SC Event listener: Vault claim event detected, but vault not found, adding now, id: "+identifier);
+                        const vaultData = await this.spvVaultContract.getVaultData(event.owner, BigInt(event.vaultId));
+                        if(vaultData!=null) {
+                            //Try to also update with the event
+                            vaultData.updateState(event);
+                            existingVault = vaultData;
+                            save = true;
+                        } else {
+                            logger.warn("SC Event listener: Vault cannot be fetched: "+identifier);
+                        }
                     }
                 } else if(event instanceof SpvVaultCloseEvent) {
                     //Remove vault
-                    const identifier = this.getIdentifier(event.owner, event.vaultId);
-                    const existingVault = this.storage.data[identifier];
                     if(existingVault!=null) {
                         logger.debug("SC Event listener: Vault close detected, removing id: "+identifier);
                         await this.remove(event.owner, event.vaultId);
                     } else {
                         logger.warn("SC Event listener: Vault close event detected, but vault already removed, id: "+identifier);
                     }
+                } else if(event instanceof SpvVaultDepositEvent) {
+                    //Advance the state of the vault
+                    if(existingVault!=null) {
+                        existingVault.updateState(event);
+                    } else {
+                        logger.warn("SC Event listener: Vault deposit event detected, but vault not found, adding now, id: "+identifier);
+                        const vaultData = await this.spvVaultContract.getVaultData(event.owner, BigInt(event.vaultId));
+                        if(vaultData!=null) {
+                            //Try to also update with the event
+                            vaultData.updateState(event);
+                            existingVault = vaultData;
+                            save = true;
+                        } else {
+                            logger.warn("SC Event listener: Vault cannot be fetched: "+identifier);
+                        }
+                    }
+
                 }
 
                 if(save) {

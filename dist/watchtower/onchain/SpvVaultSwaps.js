@@ -26,7 +26,7 @@ class SpvVaultSwaps {
                 if (!(event instanceof base_1.SpvVaultEvent))
                     continue;
                 const identifier = this.getIdentifier(event.owner, event.vaultId);
-                const existingVault = this.storage.data[identifier];
+                let existingVault = this.storage.data[identifier];
                 let save = false;
                 if (event instanceof base_1.SpvVaultOpenEvent) {
                     //Add vault to the list of tracked vaults
@@ -38,8 +38,15 @@ class SpvVaultSwaps {
                     else {
                         logger.debug("SC Event listener: Open event detected, adding new vault id: " + identifier);
                         const vaultData = yield this.spvVaultContract.getVaultData(event.owner, BigInt(event.vaultId));
-                        if (vaultData != null)
-                            yield this.save(vaultData);
+                        if (vaultData != null) {
+                            //Try to also update with the event
+                            vaultData.updateState(event);
+                            existingVault = vaultData;
+                            save = true;
+                        }
+                        else {
+                            logger.warn("SC Event listener: Vault cannot be fetched: " + identifier);
+                        }
                     }
                 }
                 else if (event instanceof base_1.SpvVaultClaimEvent) {
@@ -55,18 +62,45 @@ class SpvVaultSwaps {
                     }
                     else {
                         logger.warn("SC Event listener: Vault claim event detected, but vault not found, adding now, id: " + identifier);
+                        const vaultData = yield this.spvVaultContract.getVaultData(event.owner, BigInt(event.vaultId));
+                        if (vaultData != null) {
+                            //Try to also update with the event
+                            vaultData.updateState(event);
+                            existingVault = vaultData;
+                            save = true;
+                        }
+                        else {
+                            logger.warn("SC Event listener: Vault cannot be fetched: " + identifier);
+                        }
                     }
                 }
                 else if (event instanceof base_1.SpvVaultCloseEvent) {
                     //Remove vault
-                    const identifier = this.getIdentifier(event.owner, event.vaultId);
-                    const existingVault = this.storage.data[identifier];
                     if (existingVault != null) {
                         logger.debug("SC Event listener: Vault close detected, removing id: " + identifier);
                         yield this.remove(event.owner, event.vaultId);
                     }
                     else {
                         logger.warn("SC Event listener: Vault close event detected, but vault already removed, id: " + identifier);
+                    }
+                }
+                else if (event instanceof base_1.SpvVaultDepositEvent) {
+                    //Advance the state of the vault
+                    if (existingVault != null) {
+                        existingVault.updateState(event);
+                    }
+                    else {
+                        logger.warn("SC Event listener: Vault deposit event detected, but vault not found, adding now, id: " + identifier);
+                        const vaultData = yield this.spvVaultContract.getVaultData(event.owner, BigInt(event.vaultId));
+                        if (vaultData != null) {
+                            //Try to also update with the event
+                            vaultData.updateState(event);
+                            existingVault = vaultData;
+                            save = true;
+                        }
+                        else {
+                            logger.warn("SC Event listener: Vault cannot be fetched: " + identifier);
+                        }
                     }
                 }
                 if (save) {
