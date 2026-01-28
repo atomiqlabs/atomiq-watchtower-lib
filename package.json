@@ -22,7 +22,7 @@
   "author": "adambor",
   "license": "ISC",
   "dependencies": {
-    "@atomiqlabs/base": "github:atomiqlabs/atomiq-base#develop"
+    "@atomiqlabs/base": "^13.0.4"
   },
   "devDependencies": {
     "@types/node": "18.18.3",
