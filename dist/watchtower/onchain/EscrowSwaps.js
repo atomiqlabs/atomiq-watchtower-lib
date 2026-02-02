@@ -125,6 +125,7 @@ class EscrowSwaps {
         });
     }
     createClaimTxs(txoHash, swap, txId, voutN, blockheight, computedCommitedHeaders, initAta, feeRate) {
+        var _a;
         return __awaiter(this, void 0, void 0, function* () {
             const isCommited = yield this.swapContract.isCommited(swap.swapData);
             if (!isCommited) {
@@ -139,7 +140,9 @@ class EscrowSwaps {
             if (!txoHash.equals(computedTxoHash))
                 throw new Error("TXO hash mismatch");
             const requiredConfirmations = swap.swapData.getConfirmationsHint();
-            if (tx.confirmations < requiredConfirmations)
+            const confirmations = (_a = tx.confirmations) !== null && _a !== void 0 ? _a : 0;
+            const blockhash = tx.blockhash;
+            if (confirmations < requiredConfirmations || blockhash == null)
                 throw new Error("Not enough confirmations yet");
             let storedHeader = null;
             if (computedCommitedHeaders != null) {
@@ -147,7 +150,7 @@ class EscrowSwaps {
             }
             let txs;
             try {
-                txs = yield this.swapContract.txsClaimWithTxData(this.root.signer, swap.swapData, Object.assign(Object.assign({}, tx), { height: blockheight }), requiredConfirmations, voutN, storedHeader, null, initAta == null ? false : initAta, feeRate);
+                txs = yield this.swapContract.txsClaimWithTxData(this.root.signer, swap.swapData, Object.assign(Object.assign({}, tx), { height: blockheight, confirmations, blockhash }), requiredConfirmations, voutN, storedHeader, null, initAta == null ? false : initAta, feeRate);
             }
             catch (e) {
                 if (e instanceof base_1.SwapDataVerificationError) {
@@ -160,6 +163,7 @@ class EscrowSwaps {
         });
     }
     claim(txoHash, swap, txId, vout, blockheight) {
+        var _a;
         return __awaiter(this, void 0, void 0, function* () {
             logger.info("claim(): Claim swap: " + swap.swapData.getEscrowHash() + " UTXO: ", txId + ":" + vout + "@" + blockheight);
             try {
@@ -181,7 +185,11 @@ class EscrowSwaps {
                 try {
                     const tx = yield this.root.bitcoinRpc.getTransaction(txId);
                     const requiredConfirmations = swap.swapData.getConfirmationsHint();
-                    yield this.swapContract.claimWithTxData(this.root.signer, swap.swapData, Object.assign(Object.assign({}, tx), { height: blockheight }), requiredConfirmations, vout, null, null, (feeData === null || feeData === void 0 ? void 0 : feeData.initAta) == null ? false : feeData.initAta, {
+                    const confirmations = (_a = tx.confirmations) !== null && _a !== void 0 ? _a : 0;
+                    const blockhash = tx.blockhash;
+                    if (confirmations < requiredConfirmations || blockhash == null)
+                        throw new Error("Not enough confirmations yet");
+                    yield this.swapContract.claimWithTxData(this.root.signer, swap.swapData, Object.assign(Object.assign({}, tx), { height: blockheight, confirmations, blockhash }), requiredConfirmations, vout, null, null, (feeData === null || feeData === void 0 ? void 0 : feeData.initAta) == null ? false : feeData.initAta, {
                         waitForConfirmation: true,
                         feeRate: feeData === null || feeData === void 0 ? void 0 : feeData.feeRate
                     });
@@ -198,6 +206,7 @@ class EscrowSwaps {
                             yield this.save(swap);
                         return false;
                     }
+                    logger.error(`claim(): Failed to claim swap with txoHash: ${txoHash}!`, e);
                     return false;
                 }
                 logger.info("claim(): Claim swap: " + swap.swapData.getEscrowHash() + " success!");

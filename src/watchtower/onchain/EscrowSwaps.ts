@@ -163,7 +163,9 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
         if(!txoHash.equals(computedTxoHash)) throw new Error("TXO hash mismatch");
 
         const requiredConfirmations = swap.swapData.getConfirmationsHint();
-        if(tx.confirmations<requiredConfirmations) throw new Error("Not enough confirmations yet");
+        const confirmations = tx.confirmations ?? 0;
+        const blockhash = tx.blockhash;
+        if(confirmations<requiredConfirmations || blockhash==null) throw new Error("Not enough confirmations yet");
 
         let storedHeader: B = null;
         if(computedCommitedHeaders!=null) {
@@ -173,7 +175,7 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
         let txs;
         try {
             txs = await this.swapContract.txsClaimWithTxData(
-                this.root.signer, swap.swapData, {...tx, height: blockheight}, requiredConfirmations, voutN,
+                this.root.signer, swap.swapData, {...tx, height: blockheight, confirmations, blockhash}, requiredConfirmations, voutN,
                 storedHeader, null, initAta==null ? false : initAta, feeRate
             );
         } catch (e) {
@@ -210,8 +212,11 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
             try {
                 const tx = await this.root.bitcoinRpc.getTransaction(txId);
                 const requiredConfirmations = swap.swapData.getConfirmationsHint();
+                const confirmations = tx.confirmations ?? 0;
+                const blockhash = tx.blockhash;
+                if(confirmations<requiredConfirmations || blockhash==null) throw new Error("Not enough confirmations yet");
                 await this.swapContract.claimWithTxData(
-                    this.root.signer, swap.swapData, {...tx, height: blockheight}, requiredConfirmations, vout,
+                    this.root.signer, swap.swapData, {...tx, height: blockheight, confirmations, blockhash}, requiredConfirmations, vout,
                     null, null, feeData?.initAta==null ? false : feeData.initAta,
                     {
                         waitForConfirmation: true,
@@ -229,6 +234,7 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
                     if(this.escrowHashMap.has(swap.swapData.getEscrowHash())) await this.save(swap);
                     return false;
                 }
+                logger.error(`claim(): Failed to claim swap with txoHash: ${txoHash}!`, e);
                 return false;
             }
 
