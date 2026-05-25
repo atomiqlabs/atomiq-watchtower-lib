@@ -9,13 +9,10 @@ import {
     SwapClaimWitnessMessage,
     SwapData, SwapEvent, TransactionRevertedError
 } from "@atomiqlabs/base";
-import {getLogger} from "../utils/Utils";
+import {getLogger, LoggerType} from "../utils/Utils";
 import {SavedSwap} from "./SavedSwap";
 import {PrunedSecretsMap} from "../utils/PrunedSecretsMap";
 import {createHash} from "crypto";
-
-
-const logger = getLogger("HashlockWatchtower: ");
 
 export class HashlockSavedWatchtower<T extends ChainType> {
 
@@ -27,6 +24,7 @@ export class HashlockSavedWatchtower<T extends ChainType> {
     readonly swapDataType: { new(): T["Data"] };
     readonly shouldClaimCbk?: (swap: SavedSwap<T>) => Promise<{initAta: boolean, feeRate: any}>;
     readonly messenger: Messenger;
+    readonly logger: LoggerType;
 
     readonly escrowHashMap: Map<string, SavedSwap<T>> = new Map<string, SavedSwap<T>>();
     readonly secretsMap: PrunedSecretsMap = new PrunedSecretsMap();
@@ -48,6 +46,7 @@ export class HashlockSavedWatchtower<T extends ChainType> {
         this.signer = signer;
         this.messenger = messenger;
         this.shouldClaimCbk = escrowShouldClaimCbk;
+        this.logger = getLogger("HashlockWatchtower("+swapContract.chainId+"): ");
 
         this.swapEvents.registerListener(async (obj: ChainEvent<T["Data"]>[]) => {
             for(let event of obj) {
@@ -62,11 +61,11 @@ export class HashlockSavedWatchtower<T extends ChainType> {
                     const escrowHash = swapData.getEscrowHash();
 
                     if(this.storage.data[escrowHash]!=null) {
-                        logger.info(`chainsEventListener: Skipped adding new swap to watchlist, already there! escrowHash: ${escrowHash}`);
+                        this.logger.info(`chainsEventListener: Skipped adding new swap to watchlist, already there! escrowHash: ${escrowHash}`);
                         continue;
                     }
 
-                    logger.info("chainsEventListener: Adding new swap to watchlist: ", savedSwap);
+                    this.logger.info("chainsEventListener: Adding new swap to watchlist: ", savedSwap);
                     await this.save(savedSwap);
 
                     const witness = this.secretsMap.get(escrowHash);
@@ -75,7 +74,7 @@ export class HashlockSavedWatchtower<T extends ChainType> {
                     this.attemptClaim(savedSwap, witness);
                 } else {
                     await this.remove(event.escrowHash);
-                    logger.info("chainsEventListener: Removed swap from watchlist: ", event.escrowHash);
+                    this.logger.info("chainsEventListener: Removed swap from watchlist: ", event.escrowHash);
                 }
             }
             return true;
@@ -107,14 +106,14 @@ export class HashlockSavedWatchtower<T extends ChainType> {
         if(this.shouldClaimCbk!=null) {
             const feeData = await this.shouldClaimCbk(SavedSwap.fromSwapData(swapData));
             if(feeData==null) {
-                logger.debug("claim(): Not claiming swap with escrowHash: "+swapData.getEscrowHash()+" due to negative response from shouldClaimCbk() callback!");
+                this.logger.debug("claim(): Not claiming swap with escrowHash: "+swapData.getEscrowHash()+" due to negative response from shouldClaimCbk() callback!");
                 return;
             }
             await this.swapContract.claimWithSecret(this.signer, swapData, witness, false, feeData.initAta, {feeRate: feeData.feeRate, waitForConfirmation: true});
         } else {
             await this.swapContract.claimWithSecret(this.signer, swapData, witness, false, undefined, {waitForConfirmation: true});
         }
-        logger.info("claim(): Claimed successfully escrowHash: "+swapData.getEscrowHash()+" with witness: "+witness+"!");
+        this.logger.info("claim(): Claimed successfully escrowHash: "+swapData.getEscrowHash()+" with witness: "+witness+"!");
     }
 
     attemptClaim(savedSwap: SavedSwap<T>, witness: string): void {
@@ -124,24 +123,24 @@ export class HashlockSavedWatchtower<T extends ChainType> {
 
         const unlock = savedSwap.lock(120);
         if(unlock==null) {
-            logger.debug("attemptClaim(): Skipping escrowHash: "+escrowHash+" due to being locked!");
+            this.logger.debug("attemptClaim(): Skipping escrowHash: "+escrowHash+" due to being locked!");
             return;
         }
 
         if(this.claimsInProcess[escrowHash]!=null) {
-            logger.debug("attemptClaim(): Skipping escrowHash: "+escrowHash+" due to already being processed!");
+            this.logger.debug("attemptClaim(): Skipping escrowHash: "+escrowHash+" due to already being processed!");
             return;
         }
 
-        logger.info("attemptClaim(): Attempting to claim escrowHash: "+escrowHash+" with secret: "+witness+"!");
+        this.logger.info("attemptClaim(): Attempting to claim escrowHash: "+escrowHash+" with secret: "+witness+"!");
         this.claimsInProcess[escrowHash] = this.claim(savedSwap.swapData, witness).then(() => {
             delete this.claimsInProcess[escrowHash];
-            logger.debug("attemptClaim(): Removing swap escrowHash: "+escrowHash+" due to claim being successful!");
+            this.logger.debug("attemptClaim(): Removing swap escrowHash: "+escrowHash+" due to claim being successful!");
             this.remove(escrowHash);
         }, (e) => {
-            logger.error("attemptClaim(): Error when claiming swap escrowHash: "+escrowHash, e);
+            this.logger.error("attemptClaim(): Error when claiming swap escrowHash: "+escrowHash, e);
             if(e instanceof TransactionRevertedError) {
-                logger.error(`attemptClaim(): Claim attempt failed due to transaction revertion, will not retry for ${escrowHash}!`);
+                this.logger.error(`attemptClaim(): Claim attempt failed due to transaction revertion, will not retry for ${escrowHash}!`);
                 savedSwap.claimAttemptFailed = true;
                 if(this.escrowHashMap.has(escrowHash)) this.save(savedSwap); //Might've been removed in the meantime
             }
@@ -153,7 +152,7 @@ export class HashlockSavedWatchtower<T extends ChainType> {
 
     async init(): Promise<void> {
         await this.load();
-        logger.info("init(): Initialized!");
+        this.logger.info("init(): Initialized!");
     }
 
     async subscribeToMessages() {
@@ -166,24 +165,24 @@ export class HashlockSavedWatchtower<T extends ChainType> {
             try {
                 const parsedWitness = Buffer.from(msg.witness, "hex");
                 if(parsedWitness.length!==32) return;
-                const paymentHash = createHash("sha256").update(parsedWitness).digest();
+                const paymentHash = createHash("sha256").update(parsedWitness as Uint8Array).digest();
                 const expectedClaimHash = this.swapContract.getHashForHtlc(paymentHash);
                 if(msg.swapData.getClaimHash()!==expectedClaimHash.toString("hex")) return;
             } catch (e) {
                 return;
             }
             const escrowHash = msg.swapData.getEscrowHash();
-            if(this.secretsMap.set(escrowHash, msg.witness)) logger.debug("messageListener: Added new known secret: "+msg.witness+" escrowHash: "+escrowHash);
+            if(this.secretsMap.set(escrowHash, msg.witness)) this.logger.debug("messageListener: Added new known secret: "+msg.witness+" escrowHash: "+escrowHash);
 
             const savedSwap = this.escrowHashMap.get(escrowHash);
             if(savedSwap==null) {
-                logger.debug("messageListener: Skipping escrowHash: "+escrowHash+" due to swap not being initiated!");
+                this.logger.debug("messageListener: Skipping escrowHash: "+escrowHash+" due to swap not being initiated!");
                 return;
             }
 
             this.attemptClaim(savedSwap, msg.witness);
         });
-        logger.info("subscribeToMessages(): Subscribed to messages!");
+        this.logger.info("subscribeToMessages(): Subscribed to messages!");
     }
 
 }

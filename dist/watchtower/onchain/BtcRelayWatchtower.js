@@ -14,14 +14,14 @@ const PrunedTxMap_1 = require("./PrunedTxMap");
 const EscrowSwaps_1 = require("./EscrowSwaps");
 const SpvVaultSwaps_1 = require("./SpvVaultSwaps");
 const Utils_1 = require("../../utils/Utils");
-const logger = (0, Utils_1.getLogger)("Watchtower: ");
 class BtcRelayWatchtower {
     constructor(storage, vaultStorage, wtHeightStorageFile, btcRelay, chainEvents, swapContract, spvVaultContract, spvVaultDataDeserializer, signer, bitcoinRpc, pruningFactor, escrowShouldClaimCbk, vaultShouldClaimCbk) {
         this.btcRelay = btcRelay;
         this.swapEvents = chainEvents;
         this.signer = signer;
         this.bitcoinRpc = bitcoinRpc;
-        this.prunedTxoMap = new PrunedTxMap_1.PrunedTxMap(wtHeightStorageFile, bitcoinRpc, pruningFactor);
+        this.prunedTxoMap = new PrunedTxMap_1.PrunedTxMap(wtHeightStorageFile, bitcoinRpc, pruningFactor, swapContract.chainId);
+        this.logger = (0, Utils_1.getLogger)("Watchtower(" + swapContract.chainId + "): ");
         if (swapContract != null)
             this.EscrowSwaps = new EscrowSwaps_1.EscrowSwaps(this, storage, swapContract, escrowShouldClaimCbk);
         if (spvVaultContract != null)
@@ -33,7 +33,7 @@ class BtcRelayWatchtower {
                 yield this.EscrowSwaps.init();
             if (this.SpvVaultSwaps != null)
                 yield this.SpvVaultSwaps.init();
-            logger.info("init(): Loaded!");
+            this.logger.info("init(): Loaded!");
         });
     }
     initialSync() {
@@ -41,7 +41,7 @@ class BtcRelayWatchtower {
             const resp = yield this.btcRelay.retrieveLatestKnownBlockLog();
             //Sync to previously processed block
             yield this.prunedTxoMap.init(resp.resultBitcoinHeader.height);
-            logger.info("init(): Synced to last processed block");
+            this.logger.info("init(): Synced to last processed block");
             //Sync watchtower to the btc relay height and get all the claim txs
             return yield this.syncToTipHash(resp.resultBitcoinHeader.hash);
         });
@@ -49,15 +49,15 @@ class BtcRelayWatchtower {
     syncToTipHash(newTipBlockHash, computedHeaderMap) {
         var _a, _b;
         return __awaiter(this, void 0, void 0, function* () {
-            logger.info("syncToTipHash(): Syncing to tip hash: ", newTipBlockHash);
+            this.logger.info("syncToTipHash(): Syncing to tip hash: ", newTipBlockHash);
             //Check txoHashes that got required confirmations in these blocks,
             // but they might be already pruned if we only checked after
             const { foundTxos, foundTxins } = yield this.prunedTxoMap.syncToTipHash(newTipBlockHash, (_a = this.EscrowSwaps) === null || _a === void 0 ? void 0 : _a.txoHashMap, (_b = this.SpvVaultSwaps) === null || _b === void 0 ? void 0 : _b.txinMap);
-            logger.debug("syncToTipHash(): Returned found txins: ", foundTxins);
+            this.logger.debug("syncToTipHash(): Returned found txins: ", foundTxins);
             const escrowClaimTxs = this.EscrowSwaps == null ? {} : yield this.EscrowSwaps.getClaimTxs(foundTxos, computedHeaderMap);
             const spvVaultClaimTxs = this.SpvVaultSwaps == null ? {} : yield this.SpvVaultSwaps.getClaimTxs(foundTxins, computedHeaderMap);
-            logger.debug("syncToTipHash(): Returned escrow claim txs: ", escrowClaimTxs);
-            logger.debug("syncToTipHash(): Returned spv vault claim txs: ", spvVaultClaimTxs);
+            this.logger.debug("syncToTipHash(): Returned escrow claim txs: ", escrowClaimTxs);
+            this.logger.debug("syncToTipHash(): Returned spv vault claim txs: ", spvVaultClaimTxs);
             return Object.assign(Object.assign({}, escrowClaimTxs), spvVaultClaimTxs);
         });
     }

@@ -1,4 +1,5 @@
 import { ChainType, IStorageManager, Messenger } from "@atomiqlabs/base";
+import { LoggerType } from "../utils/Utils";
 import { SavedSwap } from "./SavedSwap";
 import { PrunedSecretsMap } from "../utils/PrunedSecretsMap";
 export declare class HashlockSavedWatchtower<T extends ChainType> {
@@ -14,6 +15,7 @@ export declare class HashlockSavedWatchtower<T extends ChainType> {
         feeRate: any;
     }>;
     readonly messenger: Messenger;
+    readonly logger: LoggerType;
     readonly escrowHashMap: Map<string, SavedSwap<T>>;
     readonly secretsMap: PrunedSecretsMap;
     constructor(storage: IStorageManager<SavedSwap<T>>, messenger: Messenger, chainEvents: T["Events"], swapContract: T["Contract"], swapDataType: {

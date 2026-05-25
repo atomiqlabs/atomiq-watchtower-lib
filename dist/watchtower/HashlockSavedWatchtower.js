@@ -15,7 +15,6 @@ const Utils_1 = require("../utils/Utils");
 const SavedSwap_1 = require("./SavedSwap");
 const PrunedSecretsMap_1 = require("../utils/PrunedSecretsMap");
 const crypto_1 = require("crypto");
-const logger = (0, Utils_1.getLogger)("HashlockWatchtower: ");
 class HashlockSavedWatchtower {
     constructor(storage, messenger, chainEvents, swapContract, swapDataType, signer, escrowShouldClaimCbk) {
         this.escrowHashMap = new Map();
@@ -29,6 +28,7 @@ class HashlockSavedWatchtower {
         this.signer = signer;
         this.messenger = messenger;
         this.shouldClaimCbk = escrowShouldClaimCbk;
+        this.logger = (0, Utils_1.getLogger)("HashlockWatchtower(" + swapContract.chainId + "): ");
         this.swapEvents.registerListener((obj) => __awaiter(this, void 0, void 0, function* () {
             for (let event of obj) {
                 if (!(event instanceof base_1.SwapEvent))
@@ -42,10 +42,10 @@ class HashlockSavedWatchtower {
                     const savedSwap = SavedSwap_1.SavedSwap.fromSwapData(swapData);
                     const escrowHash = swapData.getEscrowHash();
                     if (this.storage.data[escrowHash] != null) {
-                        logger.info(`chainsEventListener: Skipped adding new swap to watchlist, already there! escrowHash: ${escrowHash}`);
+                        this.logger.info(`chainsEventListener: Skipped adding new swap to watchlist, already there! escrowHash: ${escrowHash}`);
                         continue;
                     }
-                    logger.info("chainsEventListener: Adding new swap to watchlist: ", savedSwap);
+                    this.logger.info("chainsEventListener: Adding new swap to watchlist: ", savedSwap);
                     yield this.save(savedSwap);
                     const witness = this.secretsMap.get(escrowHash);
                     if (witness == null)
@@ -54,7 +54,7 @@ class HashlockSavedWatchtower {
                 }
                 else {
                     yield this.remove(event.escrowHash);
-                    logger.info("chainsEventListener: Removed swap from watchlist: ", event.escrowHash);
+                    this.logger.info("chainsEventListener: Removed swap from watchlist: ", event.escrowHash);
                 }
             }
             return true;
@@ -90,7 +90,7 @@ class HashlockSavedWatchtower {
             if (this.shouldClaimCbk != null) {
                 const feeData = yield this.shouldClaimCbk(SavedSwap_1.SavedSwap.fromSwapData(swapData));
                 if (feeData == null) {
-                    logger.debug("claim(): Not claiming swap with escrowHash: " + swapData.getEscrowHash() + " due to negative response from shouldClaimCbk() callback!");
+                    this.logger.debug("claim(): Not claiming swap with escrowHash: " + swapData.getEscrowHash() + " due to negative response from shouldClaimCbk() callback!");
                     return;
                 }
                 yield this.swapContract.claimWithSecret(this.signer, swapData, witness, false, feeData.initAta, { feeRate: feeData.feeRate, waitForConfirmation: true });
@@ -98,7 +98,7 @@ class HashlockSavedWatchtower {
             else {
                 yield this.swapContract.claimWithSecret(this.signer, swapData, witness, false, undefined, { waitForConfirmation: true });
             }
-            logger.info("claim(): Claimed successfully escrowHash: " + swapData.getEscrowHash() + " with witness: " + witness + "!");
+            this.logger.info("claim(): Claimed successfully escrowHash: " + swapData.getEscrowHash() + " with witness: " + witness + "!");
         });
     }
     attemptClaim(savedSwap, witness) {
@@ -107,22 +107,22 @@ class HashlockSavedWatchtower {
         const escrowHash = savedSwap.swapData.getEscrowHash();
         const unlock = savedSwap.lock(120);
         if (unlock == null) {
-            logger.debug("attemptClaim(): Skipping escrowHash: " + escrowHash + " due to being locked!");
+            this.logger.debug("attemptClaim(): Skipping escrowHash: " + escrowHash + " due to being locked!");
             return;
         }
         if (this.claimsInProcess[escrowHash] != null) {
-            logger.debug("attemptClaim(): Skipping escrowHash: " + escrowHash + " due to already being processed!");
+            this.logger.debug("attemptClaim(): Skipping escrowHash: " + escrowHash + " due to already being processed!");
             return;
         }
-        logger.info("attemptClaim(): Attempting to claim escrowHash: " + escrowHash + " with secret: " + witness + "!");
+        this.logger.info("attemptClaim(): Attempting to claim escrowHash: " + escrowHash + " with secret: " + witness + "!");
         this.claimsInProcess[escrowHash] = this.claim(savedSwap.swapData, witness).then(() => {
             delete this.claimsInProcess[escrowHash];
-            logger.debug("attemptClaim(): Removing swap escrowHash: " + escrowHash + " due to claim being successful!");
+            this.logger.debug("attemptClaim(): Removing swap escrowHash: " + escrowHash + " due to claim being successful!");
             this.remove(escrowHash);
         }, (e) => {
-            logger.error("attemptClaim(): Error when claiming swap escrowHash: " + escrowHash, e);
+            this.logger.error("attemptClaim(): Error when claiming swap escrowHash: " + escrowHash, e);
             if (e instanceof base_1.TransactionRevertedError) {
-                logger.error(`attemptClaim(): Claim attempt failed due to transaction revertion, will not retry for ${escrowHash}!`);
+                this.logger.error(`attemptClaim(): Claim attempt failed due to transaction revertion, will not retry for ${escrowHash}!`);
                 savedSwap.claimAttemptFailed = true;
                 if (this.escrowHashMap.has(escrowHash))
                     this.save(savedSwap); //Might've been removed in the meantime
@@ -133,7 +133,7 @@ class HashlockSavedWatchtower {
     init() {
         return __awaiter(this, void 0, void 0, function* () {
             yield this.load();
-            logger.info("init(): Initialized!");
+            this.logger.info("init(): Initialized!");
         });
     }
     subscribeToMessages() {
@@ -161,15 +161,15 @@ class HashlockSavedWatchtower {
                 }
                 const escrowHash = msg.swapData.getEscrowHash();
                 if (this.secretsMap.set(escrowHash, msg.witness))
-                    logger.debug("messageListener: Added new known secret: " + msg.witness + " escrowHash: " + escrowHash);
+                    this.logger.debug("messageListener: Added new known secret: " + msg.witness + " escrowHash: " + escrowHash);
                 const savedSwap = this.escrowHashMap.get(escrowHash);
                 if (savedSwap == null) {
-                    logger.debug("messageListener: Skipping escrowHash: " + escrowHash + " due to swap not being initiated!");
+                    this.logger.debug("messageListener: Skipping escrowHash: " + escrowHash + " due to swap not being initiated!");
                     return;
                 }
                 this.attemptClaim(savedSwap, msg.witness);
             });
-            logger.info("subscribeToMessages(): Subscribed to messages!");
+            this.logger.info("subscribeToMessages(): Subscribed to messages!");
         });
     }
 }

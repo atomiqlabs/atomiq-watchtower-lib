@@ -1,9 +1,7 @@
 import {createHash} from "crypto";
 import * as fs from "fs/promises";
 import {BitcoinRpc, BtcBlock, BtcBlockWithTxs} from "@atomiqlabs/base";
-import {getLogger} from "../../utils/Utils";
-
-const logger = getLogger("PrunedTxMap: ");
+import {getLogger, LoggerType} from "../../utils/Utils";
 
 export class PrunedTxMap {
 
@@ -29,10 +27,13 @@ export class PrunedTxMap {
 
     readonly pruningFactor: number;
 
-    constructor(filename: string, bitcoinRpc: BitcoinRpc<BtcBlock>, pruningFactor?: number) {
+    readonly logger: LoggerType;
+
+    constructor(filename: string, bitcoinRpc: BitcoinRpc<BtcBlock>, pruningFactor?: number, chainId?: string) {
         this.filename = filename;
         this.bitcoinRpc = bitcoinRpc;
         this.pruningFactor = pruningFactor || 30;
+        this.logger = getLogger(chainId==null ? "PrunedTxMap: " : "PrunedTxMap("+chainId+"): ");
     }
 
     async init(btcRelayHeight: number): Promise<number> {
@@ -69,7 +70,7 @@ export class PrunedTxMap {
             height: number
         }>
     }> {
-        logger.info("syncToTipHash(): Syncing to tip hash: ", tipBlockHash);
+        this.logger.info("syncToTipHash(): Syncing to tip hash: ", tipBlockHash);
 
         const blockHashes = [tipBlockHash];
         while(true) {
@@ -112,7 +113,7 @@ export class PrunedTxMap {
             if(val!=null) totalFoundTxins.set(key, val);
         });
 
-        logger.debug("syncToTipHash(): Syncing through blockhashes: ", blockHashes);
+        this.logger.debug("syncToTipHash(): Syncing through blockhashes: ", blockHashes);
 
         const newlyCreatedUtxos = new Set<string>();
         for(let i=blockHashes.length-1;i>=0;i--) {
@@ -135,7 +136,7 @@ export class PrunedTxMap {
         const buff = Buffer.alloc((outputScript.length/2) + 8);
         buff.writeBigUInt64LE(BigInt(value));
         buff.write(outputScript, 8, "hex");
-        return createHash("sha256").update(buff).digest();
+        return createHash("sha256").update(buff as Uint8Array).digest();
     }
 
     async addBlock(
@@ -160,7 +161,7 @@ export class PrunedTxMap {
 
         const block: BtcBlockWithTxs = await this.bitcoinRpc.getBlockWithTransactions(headerHash);
 
-        logger.info("addBlock(): Adding block  "+block.height+", hash: ", block.hash);
+        this.logger.info("addBlock(): Adding block  "+block.height+", hash: ", block.hash);
         if(!noSaveTipHeight) {
             this.tipHeight = block.height;
             await fs.writeFile(this.filename, this.tipHeight.toString());
@@ -180,7 +181,7 @@ export class PrunedTxMap {
         const blockTxins: string[] = [];
 
         if(this.blocksMap.has(block.height)) {
-            logger.info("addBlock(): Fork block hash: ", block.hash);
+            this.logger.info("addBlock(): Fork block hash: ", block.hash);
             //Forked off
             for(let txoHash of this.blocksMap.get(block.height).txoHashes) {
                 this.txoMap.delete(txoHash.toString("hex"));
@@ -240,7 +241,7 @@ export class PrunedTxMap {
         //Pruned
         const pruneBlockheight = block.height-this.pruningFactor;
         if(this.blocksMap.has(pruneBlockheight)) {
-            logger.debug("addBlock(): Pruning block height: ", pruneBlockheight);
+            this.logger.debug("addBlock(): Pruning block height: ", pruneBlockheight);
             const prunedBlock = this.blocksMap.get(pruneBlockheight);
             for(let txoHash of prunedBlock.txoHashes) {
                 this.txoMap.delete(txoHash.toString("hex"));

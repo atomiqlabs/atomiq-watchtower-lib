@@ -1,12 +1,14 @@
 import { SavedSwap } from "../SavedSwap";
 import { BtcStoredHeader, ChainType, IStorageManager } from "@atomiqlabs/base";
 import { BtcRelayWatchtower, WatchtowerClaimTxType } from "./BtcRelayWatchtower";
+import { LoggerType } from "../../utils/Utils";
 export declare class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
     readonly txoHashMap: Map<string, SavedSwap<T>[]>;
     readonly escrowHashMap: Map<string, SavedSwap<T>>;
     readonly storage: IStorageManager<SavedSwap<T>>;
     readonly swapContract: T["Contract"];
     readonly root: BtcRelayWatchtower<T, B>;
+    readonly logger: LoggerType;
     readonly shouldClaimCbk?: (swap: SavedSwap<T>) => Promise<{
         initAta: boolean;
         feeRate: any;

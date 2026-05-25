@@ -1,5 +1,6 @@
 /// <reference types="node" />
 import { BitcoinRpc, BtcBlock, BtcBlockWithTxs } from "@atomiqlabs/base";
+import { LoggerType } from "../../utils/Utils";
 export declare class PrunedTxMap {
     readonly txoMap: Map<string, {
         txId: string;
@@ -19,7 +20,8 @@ export declare class PrunedTxMap {
     tipHeight: number;
     readonly bitcoinRpc: BitcoinRpc<any>;
     readonly pruningFactor: number;
-    constructor(filename: string, bitcoinRpc: BitcoinRpc<BtcBlock>, pruningFactor?: number);
+    readonly logger: LoggerType;
+    constructor(filename: string, bitcoinRpc: BitcoinRpc<BtcBlock>, pruningFactor?: number, chainId?: string);
     init(btcRelayHeight: number): Promise<number>;
     syncToTipHash(tipBlockHash: string, waitingForTxosMap?: Map<string, any>, waitingForTxinMap?: Map<string, any>): Promise<{
         foundTxos: Map<string, {

@@ -3,6 +3,7 @@ import { SavedSwap } from "../SavedSwap";
 import { BtcStoredHeader, BitcoinRpc, ChainType, IStorageManager } from "@atomiqlabs/base";
 import { EscrowSwaps } from "./EscrowSwaps";
 import { SpvVaultSwaps } from "./SpvVaultSwaps";
+import { LoggerType } from "../../utils/Utils";
 export type WatchtowerEscrowClaimData<T extends ChainType> = {
     txId: string;
     vout: number;
@@ -31,6 +32,7 @@ export declare class BtcRelayWatchtower<T extends ChainType, B extends BtcStored
     readonly prunedTxoMap: PrunedTxMap;
     readonly EscrowSwaps: EscrowSwaps<T, B>;
     readonly SpvVaultSwaps: SpvVaultSwaps<T, B>;
+    readonly logger: LoggerType;
     constructor(storage: IStorageManager<SavedSwap<T>>, vaultStorage: IStorageManager<T["SpvVaultData"]>, wtHeightStorageFile: string, btcRelay: T["BtcRelay"], chainEvents: T["Events"], swapContract: T["Contract"], spvVaultContract: T["SpvVaultContract"], spvVaultDataDeserializer: new (obj: any) => T["SpvVaultData"], signer: T["Signer"], bitcoinRpc: BitcoinRpc<any>, pruningFactor?: number, escrowShouldClaimCbk?: (swap: SavedSwap<T>) => Promise<{
         initAta: boolean;
         feeRate: any;

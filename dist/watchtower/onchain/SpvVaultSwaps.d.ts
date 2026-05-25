@@ -1,11 +1,13 @@
 import { BtcStoredHeader, ChainType, IStorageManager } from "@atomiqlabs/base";
 import { BtcRelayWatchtower, WatchtowerClaimTxType } from "./BtcRelayWatchtower";
+import { LoggerType } from "../../utils/Utils";
 export declare class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
     readonly txinMap: Map<string, T["SpvVaultData"]>;
     readonly storage: IStorageManager<T["SpvVaultData"]>;
     readonly deserializer: new (data: any) => T["SpvVaultData"];
     readonly spvVaultContract: T["SpvVaultContract"];
     readonly root: BtcRelayWatchtower<T, B>;
+    readonly logger: LoggerType;
     readonly shouldClaimCbk?: (vault: T["SpvVaultData"], swapData: T["SpvVaultWithdrawalData"][]) => Promise<{
         initAta: boolean;
         feeRate: any;

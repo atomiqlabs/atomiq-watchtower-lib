@@ -12,7 +12,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SpvVaultSwaps = void 0;
 const base_1 = require("@atomiqlabs/base");
 const Utils_1 = require("../../utils/Utils");
-const logger = (0, Utils_1.getLogger)("SpvVaultSwaps: ");
 class SpvVaultSwaps {
     constructor(root, storage, deserializer, spvVaultContract, shouldClaimCbk) {
         this.txinMap = new Map();
@@ -21,6 +20,7 @@ class SpvVaultSwaps {
         this.deserializer = deserializer;
         this.spvVaultContract = spvVaultContract;
         this.shouldClaimCbk = shouldClaimCbk;
+        this.logger = (0, Utils_1.getLogger)("SpvVaultSwaps(" + spvVaultContract.chainId + "): ");
         this.root.swapEvents.registerListener((obj) => __awaiter(this, void 0, void 0, function* () {
             for (let event of obj) {
                 if (!(event instanceof base_1.SpvVaultEvent))
@@ -32,11 +32,11 @@ class SpvVaultSwaps {
                     //Add vault to the list of tracked vaults
                     if (existingVault != null) {
                         existingVault.updateState(event);
-                        logger.warn("SC Event listener: Vault open event detected, but vault already saved, id: " + identifier);
+                        this.logger.warn("SC Event listener: Vault open event detected, but vault already saved, id: " + identifier);
                         save = true;
                     }
                     else {
-                        logger.debug("SC Event listener: Open event detected, adding new vault id: " + identifier);
+                        this.logger.debug("SC Event listener: Open event detected, adding new vault id: " + identifier);
                         const vaultData = yield this.spvVaultContract.getVaultData(event.owner, BigInt(event.vaultId));
                         if (vaultData != null) {
                             //Try to also update with the event
@@ -45,7 +45,7 @@ class SpvVaultSwaps {
                             save = true;
                         }
                         else {
-                            logger.warn("SC Event listener: Vault cannot be fetched: " + identifier);
+                            this.logger.warn("SC Event listener: Vault cannot be fetched: " + identifier);
                         }
                     }
                 }
@@ -55,13 +55,13 @@ class SpvVaultSwaps {
                         const previousUtxo = existingVault.getUtxo();
                         existingVault.updateState(event);
                         if (previousUtxo !== existingVault.getUtxo()) {
-                            logger.debug("SC Event listener: Claim event processed, removing prior utxo: " + previousUtxo + " id: " + identifier);
+                            this.logger.debug("SC Event listener: Claim event processed, removing prior utxo: " + previousUtxo + " id: " + identifier);
                             this.txinMap.delete(previousUtxo);
                         }
                         save = true;
                     }
                     else {
-                        logger.warn("SC Event listener: Vault claim event detected, but vault not found, adding now, id: " + identifier);
+                        this.logger.warn("SC Event listener: Vault claim event detected, but vault not found, adding now, id: " + identifier);
                         const vaultData = yield this.spvVaultContract.getVaultData(event.owner, BigInt(event.vaultId));
                         if (vaultData != null) {
                             //Try to also update with the event
@@ -70,18 +70,18 @@ class SpvVaultSwaps {
                             save = true;
                         }
                         else {
-                            logger.warn("SC Event listener: Vault cannot be fetched: " + identifier);
+                            this.logger.warn("SC Event listener: Vault cannot be fetched: " + identifier);
                         }
                     }
                 }
                 else if (event instanceof base_1.SpvVaultCloseEvent) {
                     //Remove vault
                     if (existingVault != null) {
-                        logger.debug("SC Event listener: Vault close detected, removing id: " + identifier);
+                        this.logger.debug("SC Event listener: Vault close detected, removing id: " + identifier);
                         yield this.remove(event.owner, event.vaultId);
                     }
                     else {
-                        logger.warn("SC Event listener: Vault close event detected, but vault already removed, id: " + identifier);
+                        this.logger.warn("SC Event listener: Vault close event detected, but vault already removed, id: " + identifier);
                     }
                 }
                 else if (event instanceof base_1.SpvVaultDepositEvent) {
@@ -90,7 +90,7 @@ class SpvVaultSwaps {
                         existingVault.updateState(event);
                     }
                     else {
-                        logger.warn("SC Event listener: Vault deposit event detected, but vault not found, adding now, id: " + identifier);
+                        this.logger.warn("SC Event listener: Vault deposit event detected, but vault not found, adding now, id: " + identifier);
                         const vaultData = yield this.spvVaultContract.getVaultData(event.owner, BigInt(event.vaultId));
                         if (vaultData != null) {
                             //Try to also update with the event
@@ -99,7 +99,7 @@ class SpvVaultSwaps {
                             save = true;
                         }
                         else {
-                            logger.warn("SC Event listener: Vault cannot be fetched: " + identifier);
+                            this.logger.warn("SC Event listener: Vault cannot be fetched: " + identifier);
                         }
                     }
                 }
@@ -115,13 +115,13 @@ class SpvVaultSwaps {
             const noVaults = yield this.load();
             //Load vaults from chain
             if (noVaults) {
-                logger.info("init(): No vaults founds, syncing vaults from chain...");
+                this.logger.info("init(): No vaults founds, syncing vaults from chain...");
                 const vaults = yield this.spvVaultContract.getAllVaults();
-                logger.info("init(): Vaults synced!");
+                this.logger.info("init(): Vaults synced!");
                 for (let vault of vaults) {
                     yield this.save(vault);
                 }
-                logger.info("init(): Vaults saved!");
+                this.logger.info("init(): Vaults saved!");
             }
         });
     }
@@ -158,7 +158,7 @@ class SpvVaultSwaps {
     tryGetClaimTxs(vault, txs, tipHeight, computedHeaderMap) {
         return __awaiter(this, void 0, void 0, function* () {
             if (!vault.isOpened()) {
-                logger.warn("tryGetClaimTxs(): Tried to claim but vault is not opened!");
+                this.logger.warn("tryGetClaimTxs(): Tried to claim but vault is not opened!");
                 return null;
             }
             //Get fresh vault
@@ -168,13 +168,13 @@ class SpvVaultSwaps {
             for (let tx of txs) {
                 if (tx.height + vault.getConfirmations() - 1 > tipHeight)
                     break;
-                logger.debug("tryGetClaimTxs(): Adding new tx to withdrawals, owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " btcTx: ", tx);
+                this.logger.debug("tryGetClaimTxs(): Adding new tx to withdrawals, owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " btcTx: ", tx);
                 try {
                     const btcTx = yield this.root.bitcoinRpc.getTransaction(tx.txId);
                     //If there was a re-org in the meantime, the getTransaction() call here can still return blockhash=null
                     // which then breaks the merkle tree computation (obviously), hence the check
                     if (btcTx.confirmations < vault.getConfirmations()) {
-                        logger.warn(`tryGetClaimTxs(): Transaction doesn't have enough confirmations, txId: ${btcTx.txid}, confirmations: ${btcTx.confirmations}, target: ${vault.getConfirmations()}`);
+                        this.logger.warn(`tryGetClaimTxs(): Transaction doesn't have enough confirmations, txId: ${btcTx.txid}, confirmations: ${btcTx.confirmations}, target: ${vault.getConfirmations()}`);
                         break;
                     }
                     const parsedTx = yield this.spvVaultContract.getWithdrawalData(btcTx);
@@ -184,7 +184,7 @@ class SpvVaultSwaps {
                     blockheaders.push(computedHeaderMap === null || computedHeaderMap === void 0 ? void 0 : computedHeaderMap[tx.height]);
                 }
                 catch (e) {
-                    logger.error("tryGetClaimTxs(): Error parsing withdrawal data/calculating state: ", e);
+                    this.logger.error("tryGetClaimTxs(): Error parsing withdrawal data/calculating state: ", e);
                     break;
                 }
             }
@@ -195,12 +195,12 @@ class SpvVaultSwaps {
             if (this.shouldClaimCbk != null) {
                 const result = yield this.shouldClaimCbk(vault, withdrawals);
                 if (result == null) {
-                    logger.debug("tryGetClaimTxs(): Not claiming due to negative response from claim cbk, owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " withdrawals: " + withdrawals.length);
+                    this.logger.debug("tryGetClaimTxs(): Not claiming due to negative response from claim cbk, owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " withdrawals: " + withdrawals.length);
                     return null;
                 }
                 ({ feeRate, initAta } = result);
             }
-            logger.info("tryGetClaimTxs(): Processing " + withdrawals.length + " withdrawals for vault: " + this.getIdentifier(vault.getOwner(), vault.getVaultId()));
+            this.logger.info("tryGetClaimTxs(): Processing " + withdrawals.length + " withdrawals for vault: " + this.getIdentifier(vault.getOwner(), vault.getVaultId()));
             const withdrawalTxData = withdrawals.map(((tx, index) => {
                 return {
                     tx,
@@ -234,7 +234,7 @@ class SpvVaultSwaps {
                     if (useWithdrawalTxData !== withdrawalTxData && this.shouldClaimCbk != null) {
                         const result = yield this.shouldClaimCbk(useVault, useWithdrawalTxData.map(val => val.tx));
                         if (result == null) {
-                            logger.debug("tryGetClaimTxs(): Not claiming due to negative response from claim cbk, owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " withdrawals: " + withdrawals.length);
+                            this.logger.debug("tryGetClaimTxs(): Not claiming due to negative response from claim cbk, owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " withdrawals: " + withdrawals.length);
                             return null;
                         }
                         ({ feeRate: useFeeRate, initAta: useInitAta } = result);
@@ -264,20 +264,20 @@ class SpvVaultSwaps {
             // but they might be already pruned if we only checked after
             const processedUtxos = new Set();
             if (foundTxins != null) {
-                logger.debug("getClaimTxs(): Checking found txins: ", foundTxins);
+                this.logger.debug("getClaimTxs(): Checking found txins: ", foundTxins);
                 for (let entry of foundTxins.entries()) {
                     const utxo = entry[0];
                     if (processedUtxos.has(utxo)) {
-                        logger.debug("getClaimTxs(): Skipping utxo, already processed, utxo: ", processedUtxos);
+                        this.logger.debug("getClaimTxs(): Skipping utxo, already processed, utxo: ", processedUtxos);
                         continue;
                     }
                     const vault = this.txinMap.get(utxo);
                     if (vault == null) {
-                        logger.warn("getClaimTxs(): Skipping claiming of tx " + entry[1].txId + " because swap vault isn't known!");
+                        this.logger.warn("getClaimTxs(): Skipping claiming of tx " + entry[1].txId + " because swap vault isn't known!");
                         continue;
                     }
                     const txsData = [entry[1]];
-                    logger.debug("getClaimTxs(): Adding initial btc tx owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " btcTx: ", entry[1]);
+                    this.logger.debug("getClaimTxs(): Adding initial btc tx owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " btcTx: ", entry[1]);
                     //Try to also get next withdrawals
                     while (true) {
                         const nextUtxo = txsData[txsData.length - 1].txId + ":0";
@@ -286,35 +286,35 @@ class SpvVaultSwaps {
                             break;
                         processedUtxos.add(nextUtxo);
                         txsData.push(nextFoundTxData);
-                        logger.debug("getClaimTxs(): Adding additional btc tx owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " btcTx: ", nextFoundTxData);
+                        this.logger.debug("getClaimTxs(): Adding additional btc tx owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " btcTx: ", nextFoundTxData);
                     }
                     vaultWithdrawalTxs[this.getIdentifier(vault.getOwner(), vault.getVaultId())] = txsData;
                 }
             }
             //Check all the txs, if they are already confirmed in these blocks
-            logger.debug("getClaimTxs(): Checking all saved swaps...");
+            this.logger.debug("getClaimTxs(): Checking all saved swaps...");
             for (let [utxo, vault] of this.txinMap.entries()) {
                 if (processedUtxos.has(utxo)) {
-                    logger.debug("getClaimTxs(): Skipping utxo, already processed, utxo: ", processedUtxos);
+                    this.logger.debug("getClaimTxs(): Skipping utxo, already processed, utxo: ", processedUtxos);
                     continue;
                 }
                 const vaultIdentifier = this.getIdentifier(vault.getOwner(), vault.getVaultId());
                 if (vaultWithdrawalTxs[vaultIdentifier] != null) {
-                    logger.debug("getClaimTxs(): Skipping vault, already processed, owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10));
+                    this.logger.debug("getClaimTxs(): Skipping vault, already processed, owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10));
                     continue;
                 }
                 const data = this.root.prunedTxoMap.getTxinObject(utxo);
                 if (data == null)
                     continue;
                 const txsData = [data];
-                logger.debug("getClaimTxs(): Adding initial btc tx owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " btcTx: ", data);
+                this.logger.debug("getClaimTxs(): Adding initial btc tx owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " btcTx: ", data);
                 while (true) {
                     const nextUtxo = txsData[txsData.length - 1].txId + ":0";
                     const nextFoundTxData = this.root.prunedTxoMap.getTxinObject(nextUtxo);
                     if (nextFoundTxData == null)
                         break;
                     txsData.push(nextFoundTxData);
-                    logger.debug("getClaimTxs(): Adding additional btc tx owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " btcTx: ", nextFoundTxData);
+                    this.logger.debug("getClaimTxs(): Adding additional btc tx owner: " + vault.getOwner() + " vaultId: " + vault.getVaultId().toString(10) + " btcTx: ", nextFoundTxData);
                 }
                 vaultWithdrawalTxs[vaultIdentifier] = txsData;
             }
@@ -328,7 +328,7 @@ class SpvVaultSwaps {
                     txs[vaultIdentifier] = res;
                 }
                 catch (e) {
-                    logger.error("getClaimTxs(): Error when trying to get claim txs for vault: " + vaultIdentifier, e);
+                    this.logger.error("getClaimTxs(): Error when trying to get claim txs for vault: " + vaultIdentifier, e);
                 }
             }
             return txs;

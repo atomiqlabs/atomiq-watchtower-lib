@@ -1,11 +1,12 @@
 {
   "name": "@atomiqlabs/watchtower-lib",
-  "version": "11.0.0",
+  "version": "11.0.1",
   "description": "atomiq watchtower functionality library",
   "main": "./dist/index.js",
   "types:": "./dist/index.d.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "npx -y -p typescript@4.9 tsc"
   },
   "files": [
     "/dist",

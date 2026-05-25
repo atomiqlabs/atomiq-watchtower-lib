@@ -7,7 +7,7 @@ import {
 } from "@atomiqlabs/base";
 import { EscrowSwaps } from "./EscrowSwaps";
 import { SpvVaultSwaps } from "./SpvVaultSwaps";
-import {getLogger} from "../../utils/Utils";
+import {getLogger, LoggerType} from "../../utils/Utils";
 
 export type WatchtowerEscrowClaimData<T extends ChainType> = {
     txId: string,
@@ -32,8 +32,6 @@ export type WatchtowerClaimTxType<T extends ChainType> = {
     data: WatchtowerEscrowClaimData<T> | WatchtowerSpvVaultClaimData<T>
 };
 
-const logger = getLogger("Watchtower: ");
-
 export class BtcRelayWatchtower<T extends ChainType, B extends BtcStoredHeader<any>> {
 
     readonly btcRelay: T["BtcRelay"];
@@ -47,6 +45,8 @@ export class BtcRelayWatchtower<T extends ChainType, B extends BtcStoredHeader<a
 
     readonly EscrowSwaps: EscrowSwaps<T, B>;
     readonly SpvVaultSwaps: SpvVaultSwaps<T, B>;
+
+    readonly logger: LoggerType;
 
     constructor(
         storage: IStorageManager<SavedSwap<T>>,
@@ -67,7 +67,10 @@ export class BtcRelayWatchtower<T extends ChainType, B extends BtcStoredHeader<a
         this.swapEvents = chainEvents;
         this.signer = signer;
         this.bitcoinRpc = bitcoinRpc;
-        this.prunedTxoMap = new PrunedTxMap(wtHeightStorageFile, bitcoinRpc, pruningFactor);
+        this.prunedTxoMap = new PrunedTxMap(wtHeightStorageFile, bitcoinRpc, pruningFactor, swapContract.chainId);
+
+        this.logger = getLogger("Watchtower("+swapContract.chainId+"): ");
+
         if(swapContract!=null) this.EscrowSwaps = new EscrowSwaps(this, storage, swapContract, escrowShouldClaimCbk);
         if(spvVaultContract!=null) this.SpvVaultSwaps = new SpvVaultSwaps(this, vaultStorage, spvVaultDataDeserializer, spvVaultContract, vaultShouldClaimCbk)
     }
@@ -75,7 +78,7 @@ export class BtcRelayWatchtower<T extends ChainType, B extends BtcStoredHeader<a
     async init(): Promise<void> {
         if(this.EscrowSwaps!=null) await this.EscrowSwaps.init();
         if(this.SpvVaultSwaps!=null) await this.SpvVaultSwaps.init();
-        logger.info("init(): Loaded!");
+        this.logger.info("init(): Loaded!");
     }
 
     async initialSync(): Promise<{
@@ -85,7 +88,7 @@ export class BtcRelayWatchtower<T extends ChainType, B extends BtcStoredHeader<a
 
         //Sync to previously processed block
         await this.prunedTxoMap.init(resp.resultBitcoinHeader.height);
-        logger.info("init(): Synced to last processed block");
+        this.logger.info("init(): Synced to last processed block");
 
         //Sync watchtower to the btc relay height and get all the claim txs
         return await this.syncToTipHash(resp.resultBitcoinHeader.hash);
@@ -97,17 +100,17 @@ export class BtcRelayWatchtower<T extends ChainType, B extends BtcStoredHeader<a
     ): Promise<{
         [identifier: string]: WatchtowerClaimTxType<T>
     }> {
-        logger.info("syncToTipHash(): Syncing to tip hash: ", newTipBlockHash);
+        this.logger.info("syncToTipHash(): Syncing to tip hash: ", newTipBlockHash);
 
         //Check txoHashes that got required confirmations in these blocks,
         // but they might be already pruned if we only checked after
         const {foundTxos, foundTxins} = await this.prunedTxoMap.syncToTipHash(newTipBlockHash, this.EscrowSwaps?.txoHashMap, this.SpvVaultSwaps?.txinMap);
-        logger.debug("syncToTipHash(): Returned found txins: ", foundTxins);
+        this.logger.debug("syncToTipHash(): Returned found txins: ", foundTxins);
 
         const escrowClaimTxs = this.EscrowSwaps==null ? {} : await this.EscrowSwaps.getClaimTxs(foundTxos, computedHeaderMap);
         const spvVaultClaimTxs = this.SpvVaultSwaps==null ? {} : await this.SpvVaultSwaps.getClaimTxs(foundTxins, computedHeaderMap);
-        logger.debug("syncToTipHash(): Returned escrow claim txs: ", escrowClaimTxs);
-        logger.debug("syncToTipHash(): Returned spv vault claim txs: ", spvVaultClaimTxs);
+        this.logger.debug("syncToTipHash(): Returned escrow claim txs: ", escrowClaimTxs);
+        this.logger.debug("syncToTipHash(): Returned spv vault claim txs: ", spvVaultClaimTxs);
 
         return {
             ...escrowClaimTxs,
