@@ -31,9 +31,9 @@ class HashlockSavedWatchtower {
         this.logger = (0, Utils_1.getLogger)("HashlockWatchtower(" + swapContract.chainId + "): ");
         this.swapEvents.registerListener((obj) => __awaiter(this, void 0, void 0, function* () {
             for (let event of obj) {
-                if (!(event instanceof base_1.SwapEvent))
+                if (!(0, base_1.isSwapEvent)(event))
                     continue;
-                if (event instanceof base_1.InitializeEvent) {
+                if ((0, base_1.isInitializeEvent)(event)) {
                     if (event.swapType !== base_1.ChainSwapType.HTLC)
                         continue;
                     const swapData = yield event.swapData();
@@ -121,7 +121,7 @@ class HashlockSavedWatchtower {
             this.remove(escrowHash);
         }, (e) => {
             this.logger.error("attemptClaim(): Error when claiming swap escrowHash: " + escrowHash, e);
-            if (e instanceof base_1.TransactionRevertedError) {
+            if ((0, base_1.isTransactionRevertedError)(e)) {
                 this.logger.error(`attemptClaim(): Claim attempt failed due to transaction revertion, will not retry for ${escrowHash}!`);
                 savedSwap.claimAttemptFailed = true;
                 if (this.escrowHashMap.has(escrowHash))

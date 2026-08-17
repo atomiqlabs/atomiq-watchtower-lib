@@ -3,8 +3,8 @@ import {PrunedTxMap} from "./PrunedTxMap";
 import {
     BtcStoredHeader, ChainEvent, ChainSwapType,
     ChainType,
-    InitializeEvent,
-    IStorageManager,
+    InitializeEvent, isInitializeEvent, isSwapDataVerificationError, isSwapEvent,
+    IStorageManager, isTransactionRevertedError,
     SwapDataVerificationError,
     SwapEvent, TransactionRevertedError
 } from "@atomiqlabs/base";
@@ -40,8 +40,8 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
 
         this.root.swapEvents.registerListener(async (obj: ChainEvent<T["Data"]>[]) => {
             for(let event of obj) {
-                if(!(event instanceof SwapEvent)) continue;
-                if(event instanceof InitializeEvent) {
+                if(!isSwapEvent(event)) continue;
+                if(isInitializeEvent(event)) {
                     if(event.swapType!==ChainSwapType.CHAIN) continue;
 
                     const swapData = await event.swapData();
@@ -180,7 +180,7 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
                 storedHeader, null, initAta==null ? false : initAta, feeRate
             );
         } catch (e) {
-            if(e instanceof SwapDataVerificationError) {
+            if(isSwapDataVerificationError(e)) {
                 this.logger.warn("createClaimTxs(): Not claiming swap txoHash: "+txoHash.toString("hex")+" due to SwapDataVerificationError!", e);
                 return null;
             }
@@ -225,11 +225,11 @@ export class EscrowSwaps<T extends ChainType, B extends BtcStoredHeader<any>> {
                     }
                 );
             } catch (e) {
-                if(e instanceof SwapDataVerificationError) {
+                if(isSwapDataVerificationError(e)) {
                     await this.remove(swap);
                     return false;
                 }
-                if(e instanceof TransactionRevertedError) {
+                if(isTransactionRevertedError(e)) {
                     this.logger.error(`claim(): Marking claim attempt failed (tx reverted) for swap with txoHash: ${txoHash}!`, e);
                     swap.claimAttemptFailed = true;
                     if(this.escrowHashMap.has(swap.swapData.getEscrowHash())) await this.save(swap);

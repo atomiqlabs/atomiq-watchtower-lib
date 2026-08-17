@@ -1,8 +1,8 @@
 import {
     ChainEvent,
     ChainSwapType,
-    ChainType, InitializeEvent,
-    IStorageManager,
+    ChainType, InitializeEvent, isInitializeEvent, isSwapEvent,
+    IStorageManager, isTransactionRevertedError,
     Message,
     MessageType,
     Messenger,
@@ -50,8 +50,8 @@ export class HashlockSavedWatchtower<T extends ChainType> {
 
         this.swapEvents.registerListener(async (obj: ChainEvent<T["Data"]>[]) => {
             for(let event of obj) {
-                if(!(event instanceof SwapEvent)) continue;
-                if(event instanceof InitializeEvent) {
+                if(!isSwapEvent(event)) continue;
+                if(isInitializeEvent(event)) {
                     if(event.swapType!==ChainSwapType.HTLC) continue;
 
                     const swapData: SwapData = await event.swapData();
@@ -139,7 +139,7 @@ export class HashlockSavedWatchtower<T extends ChainType> {
             this.remove(escrowHash);
         }, (e) => {
             this.logger.error("attemptClaim(): Error when claiming swap escrowHash: "+escrowHash, e);
-            if(e instanceof TransactionRevertedError) {
+            if(isTransactionRevertedError(e)) {
                 this.logger.error(`attemptClaim(): Claim attempt failed due to transaction revertion, will not retry for ${escrowHash}!`);
                 savedSwap.claimAttemptFailed = true;
                 if(this.escrowHashMap.has(escrowHash)) this.save(savedSwap); //Might've been removed in the meantime

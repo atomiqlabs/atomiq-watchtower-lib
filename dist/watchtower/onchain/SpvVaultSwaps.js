@@ -23,12 +23,12 @@ class SpvVaultSwaps {
         this.logger = (0, Utils_1.getLogger)("SpvVaultSwaps(" + spvVaultContract.chainId + "): ");
         this.root.swapEvents.registerListener((obj) => __awaiter(this, void 0, void 0, function* () {
             for (let event of obj) {
-                if (!(event instanceof base_1.SpvVaultEvent))
+                if (!(0, base_1.isSpvVaultEvent)(event))
                     continue;
                 const identifier = this.getIdentifier(event.owner, event.vaultId);
                 let existingVault = this.storage.data[identifier];
                 let save = false;
-                if (event instanceof base_1.SpvVaultOpenEvent) {
+                if ((0, base_1.isSpvVaultOpenEvent)(event)) {
                     //Add vault to the list of tracked vaults
                     if (existingVault != null) {
                         existingVault.updateState(event);
@@ -49,7 +49,7 @@ class SpvVaultSwaps {
                         }
                     }
                 }
-                else if (event instanceof base_1.SpvVaultClaimEvent) {
+                else if ((0, base_1.isSpvVaultClaimEvent)(event)) {
                     //Advance the state of the vault
                     if (existingVault != null) {
                         const previousUtxo = existingVault.getUtxo();
@@ -74,7 +74,7 @@ class SpvVaultSwaps {
                         }
                     }
                 }
-                else if (event instanceof base_1.SpvVaultCloseEvent) {
+                else if ((0, base_1.isSpvVaultCloseEvent)(event)) {
                     //Remove vault
                     if (existingVault != null) {
                         this.logger.debug("SC Event listener: Vault close detected, removing id: " + identifier);
@@ -84,7 +84,7 @@ class SpvVaultSwaps {
                         this.logger.warn("SC Event listener: Vault close event detected, but vault already removed, id: " + identifier);
                     }
                 }
-                else if (event instanceof base_1.SpvVaultDepositEvent) {
+                else if ((0, base_1.isSpvVaultDepositEvent)(event)) {
                     //Advance the state of the vault
                     if (existingVault != null) {
                         existingVault.updateState(event);

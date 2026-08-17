@@ -25,9 +25,9 @@ class EscrowSwaps {
         this.logger = (0, Utils_1.getLogger)("EscrowSwaps(" + swapContract.chainId + "): ");
         this.root.swapEvents.registerListener((obj) => __awaiter(this, void 0, void 0, function* () {
             for (let event of obj) {
-                if (!(event instanceof base_1.SwapEvent))
+                if (!(0, base_1.isSwapEvent)(event))
                     continue;
-                if (event instanceof base_1.InitializeEvent) {
+                if ((0, base_1.isInitializeEvent)(event)) {
                     if (event.swapType !== base_1.ChainSwapType.CHAIN)
                         continue;
                     const swapData = yield event.swapData();
@@ -153,7 +153,7 @@ class EscrowSwaps {
                 txs = yield this.swapContract.txsClaimWithTxData(this.root.signer, swap.swapData, Object.assign(Object.assign({}, tx), { height: blockheight, confirmations, blockhash }), requiredConfirmations, voutN, storedHeader, null, initAta == null ? false : initAta, feeRate);
             }
             catch (e) {
-                if (e instanceof base_1.SwapDataVerificationError) {
+                if ((0, base_1.isSwapDataVerificationError)(e)) {
                     this.logger.warn("createClaimTxs(): Not claiming swap txoHash: " + txoHash.toString("hex") + " due to SwapDataVerificationError!", e);
                     return null;
                 }
@@ -195,11 +195,11 @@ class EscrowSwaps {
                     });
                 }
                 catch (e) {
-                    if (e instanceof base_1.SwapDataVerificationError) {
+                    if ((0, base_1.isSwapDataVerificationError)(e)) {
                         yield this.remove(swap);
                         return false;
                     }
-                    if (e instanceof base_1.TransactionRevertedError) {
+                    if ((0, base_1.isTransactionRevertedError)(e)) {
                         this.logger.error(`claim(): Marking claim attempt failed (tx reverted) for swap with txoHash: ${txoHash}!`, e);
                         swap.claimAttemptFailed = true;
                         if (this.escrowHashMap.has(swap.swapData.getEscrowHash()))

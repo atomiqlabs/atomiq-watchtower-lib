@@ -1,7 +1,7 @@
 import {
     BtcStoredHeader,
     ChainEvent,
-    ChainType,
+    ChainType, isSpvVaultClaimEvent, isSpvVaultCloseEvent, isSpvVaultDepositEvent, isSpvVaultEvent, isSpvVaultOpenEvent,
     IStorageManager, SpvVaultClaimEvent, SpvVaultCloseEvent, SpvVaultDepositEvent,
     SpvVaultEvent,
     SpvVaultOpenEvent
@@ -40,12 +40,12 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
 
         this.root.swapEvents.registerListener(async (obj: ChainEvent<T["Data"]>[]) => {
             for(let event of obj) {
-                if(!(event instanceof SpvVaultEvent)) continue;
+                if(!isSpvVaultEvent(event)) continue;
                 const identifier = this.getIdentifier(event.owner, event.vaultId);
                 let existingVault = this.storage.data[identifier];
                 let save = false;
 
-                if(event instanceof SpvVaultOpenEvent) {
+                if(isSpvVaultOpenEvent(event)) {
                     //Add vault to the list of tracked vaults
                     if(existingVault!=null) {
                         existingVault.updateState(event);
@@ -63,7 +63,7 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
                             this.logger.warn("SC Event listener: Vault cannot be fetched: "+identifier);
                         }
                     }
-                } else if(event instanceof SpvVaultClaimEvent) {
+                } else if(isSpvVaultClaimEvent(event)) {
                     //Advance the state of the vault
                     if(existingVault!=null) {
                         const previousUtxo = existingVault.getUtxo();
@@ -85,7 +85,7 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
                             this.logger.warn("SC Event listener: Vault cannot be fetched: "+identifier);
                         }
                     }
-                } else if(event instanceof SpvVaultCloseEvent) {
+                } else if(isSpvVaultCloseEvent(event)) {
                     //Remove vault
                     if(existingVault!=null) {
                         this.logger.debug("SC Event listener: Vault close detected, removing id: "+identifier);
@@ -93,7 +93,7 @@ export class SpvVaultSwaps<T extends ChainType, B extends BtcStoredHeader<any>> 
                     } else {
                         this.logger.warn("SC Event listener: Vault close event detected, but vault already removed, id: "+identifier);
                     }
-                } else if(event instanceof SpvVaultDepositEvent) {
+                } else if(isSpvVaultDepositEvent(event)) {
                     //Advance the state of the vault
                     if(existingVault!=null) {
                         existingVault.updateState(event);
