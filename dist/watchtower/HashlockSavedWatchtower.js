@@ -139,10 +139,11 @@ class HashlockSavedWatchtower {
     subscribeToMessages() {
         return __awaiter(this, void 0, void 0, function* () {
             yield this.messenger.init();
-            yield this.messenger.subscribe((_msg) => {
-                if (_msg.type !== base_1.MessageType.SWAP_CLAIM_WITNESS)
+            yield this.messenger.subscribe((msg) => {
+                if (!(0, base_1.isSwapClaimWitnessMessage)(msg))
                     return;
-                const msg = _msg;
+                if (msg.chainId != null && this.swapContract.chainId !== msg.chainId)
+                    return;
                 if (!(msg.swapData instanceof this.swapDataType))
                     return;
                 if (msg.swapData.getType() !== base_1.ChainSwapType.HTLC)

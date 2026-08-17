@@ -23,7 +23,7 @@
   "author": "adambor",
   "license": "ISC",
   "dependencies": {
-    "@atomiqlabs/base": ">=13.7.0"
+    "@atomiqlabs/base": ">=13.8.0"
   },
   "devDependencies": {
     "@types/node": "18.18.3",

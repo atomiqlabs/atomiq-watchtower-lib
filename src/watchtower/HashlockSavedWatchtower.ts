@@ -1,7 +1,7 @@
 import {
     ChainEvent,
     ChainSwapType,
-    ChainType, InitializeEvent, isInitializeEvent, isSwapEvent,
+    ChainType, InitializeEvent, isInitializeEvent, isSwapClaimWitnessMessage, isSwapEvent,
     IStorageManager, isTransactionRevertedError,
     Message,
     MessageType,
@@ -157,9 +157,9 @@ export class HashlockSavedWatchtower<T extends ChainType> {
 
     async subscribeToMessages() {
         await this.messenger.init();
-        await this.messenger.subscribe((_msg: Message) => {
-            if(_msg.type !== MessageType.SWAP_CLAIM_WITNESS) return;
-            const msg = _msg as SwapClaimWitnessMessage<SwapData>;
+        await this.messenger.subscribe((msg: Message) => {
+            if(!isSwapClaimWitnessMessage(msg)) return;
+            if(msg.chainId!=null && this.swapContract.chainId!==msg.chainId) return;
             if(!(msg.swapData instanceof this.swapDataType)) return;
             if(msg.swapData.getType()!==ChainSwapType.HTLC) return;
             try {
